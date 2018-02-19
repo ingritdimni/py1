@@ -6,6 +6,7 @@ import sqlite3
 from sklearn.metrics import accuracy_score, log_loss
 import warnings
 warnings.filterwarnings('ignore')
+from math import log
 
 sns.set(style='whitegrid', context='notebook', palette='deep')
 
@@ -59,15 +60,12 @@ def main():
     matches = matches.dropna(axis=0).reset_index(drop=True)
 
     print(matches.shape)  # (22432, 29)
+    # print(matches.isnull().sum())  # The dataset is ready, no missing value remains.
 
-    print(matches.isnull().sum())  # The dataset is ready, no missing value remains.
-
-    # on the below, we search for the most predictable league
+    # on the below lines, we search for the most predictable league
 
     matches = matches.merge(countries, left_on="league_id", right_on="id")
-
     matches = matches.drop(labels=["id_y", "league_id", "country_id"], axis=1)
-
     matches = matches.rename(columns={'name': 'league_country'})
 
     matches["result"] = (matches["home_team_goal"] - matches["away_team_goal"]).map(
@@ -85,22 +83,54 @@ def main():
         row_sums = probabilities[bkm].sum(axis=1).reshape((-1, 1))
         probabilities[bkm] = np.divide(probabilities[bkm], row_sums)
 
+    # the below is a validation of the log likelyhood score used below
+    # booky_score = dict()
+    # for bkm in bookies:
+    #     booky_score[bkm] = 0
+    #     for i in range(matches["result"].shape[0]):
+    #         res = matches["result"][i]  # 0 or 1 or 2
+    #         probs = probabilities[bkm][i]
+    #         booky_score[bkm] -= log(probs[res])
+    #     booky_score[bkm] /= (matches["result"].shape[0])
+
     # who is best at predicting match results ?
     for bkm in bookies:
         print('avg victory prediction', bkm, accuracy_score(matches["result"], matches[bkm]))
-        # the below score has to be manually validated by runninng it manually on 2-3 matchs only
-        #print('log likelyhood score', bkm, log_loss(matches["result"], probabilities[bkm]))
+        print('log likelyhood score', bkm, log_loss(matches["result"], probabilities[bkm]))
+        # print('my log likelyhood score', booky_score[bkm])
 
     # Compute accuracy in each group in the groupby pandas objects
     def acc_group(y_true_desc, y_pred_desc):
         def inner(group):
             return accuracy_score(group[y_true_desc], group[y_pred_desc])
 
-        inner.__name__ = 'acc_group'
+        #inner.__name__ = 'acc_group'
         return inner
 
-    matches.groupby("league_country").apply(acc_group("result", "B365"))
+    def log_likelyhood_group(y_true_desc, y_pred_desc):
+        def inner(group):
+            probs = np.reciprocal(group[[y_pred_desc + m_issue for m_issue in match_issues]].values)
+            row_sums = probs.sum(axis=1).reshape((-1, 1))
+            probs = np.divide(probs, row_sums)
+            return -log_loss(group[y_true_desc], probs)
+        return inner
 
+
+    #matches.groupby("league_country").apply(log_likelyhood_group("result", "B365"))
+    league_seasons_log_likelyhood = matches.groupby(("league_country", "season")).apply(log_likelyhood_group("result",
+                                                                                                         "B365"))
+    league_seasons_log_likelyhood = league_seasons_log_likelyhood.reset_index()
+    league_seasons_log_likelyhood = league_seasons_log_likelyhood.rename(columns={0: 'accuracy'})
+    selected_countries = ["France", "Spain", "England", "Germany", "Italy"]
+
+    Five_leagues = league_seasons_log_likelyhood[league_seasons_log_likelyhood['league_country'].isin(selected_countries)]
+
+    g = sns.factorplot(x="season", y="accuracy", hue="league_country", data=Five_leagues, size=6, aspect=1.5)
+    g.set_xticklabels(rotation=45)
+    plt.suptitle('Bet 365 minus log likelyhood for the 5 biggest soccer leagues (the smaller the more likely)')
+    plt.show()
+
+    #matches.groupby("league_country").apply(acc_group("result", "B365"))
     league_seasons_accuracies = matches.groupby(("league_country", "season")).apply(acc_group("result", "B365"))
     league_seasons_accuracies = league_seasons_accuracies.reset_index()
     league_seasons_accuracies = league_seasons_accuracies.rename(columns={0: 'accuracy'})
@@ -112,7 +142,6 @@ def main():
     g.set_xticklabels(rotation=45)
     plt.suptitle('Bet 365 accuracy for the 5 biggest soccer leagues')
     plt.show()
-
 
 if __name__ == '__main__':
     main()
