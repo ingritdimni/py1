@@ -26,6 +26,7 @@ def main():
     df1 = pd.DataFrame({'A': [1, 2, 3, 4, 5], 'B': ['a', 'b', 'c', 'd', 'e']})
     df2 = pd.DataFrame({'AA': ['pouet1', 'pouet2', 'pouet3'], 'BB': ['d', 'b', 'a']})
     print(df1['B'].isin(df2['BB']))
+    print(list(df1['B']))
 
     # all_countries =['England', 'France', 'Spain', 'Italy', 'Germany', 'Netherlands', 'Portugal', 'Poland', 'Scotland',
     #                 'Belgium', 'Switzerland']
@@ -66,9 +67,42 @@ def main():
             print(involved_teams.head(3))
             print(involved_teams.shape)
 
-            team_dummies = pd.get_dummies(matches['home_team_api_id'])
-            print(team_dummies)
-            print(team_dummies.shape)
+            #team_dummies = pd.get_dummies(matches['home_team_api_id'])
+
+            prep_dummy = matches['home_team_api_id'].astype('category', categories=involved_teams['team_api_id'])
+            dummy_matches_home_teams = pd.get_dummies(prep_dummy).astype('int')
+
+            initial_serie = dummy_matches_home_teams.idxmax(axis=1)
+            print(initial_serie.equals(initial_serie))
+            print("####")
+            print(prep_dummy)
+            print(prep_dummy.shape)
+            # print(initial_serie)
+            # print("####")
+            # print(matches['home_team_api_id'])
+
+            my_team_long_name = "FC Nantes"  # team_api_id = 9830
+            my_team_api_id = 8583  # "AJ Auxerre"
+            key, input, other_key = "team_api_id", my_team_api_id, "team_long_name"
+            key2, input2, other_key2 = "team_long_name", my_team_long_name, "team_api_id"
+
+            # mapping use team universe, which is "involved_teams"
+            def my_mapping(key, input, other_key):
+                res = involved_teams[involved_teams[key] == input][other_key]
+                assert(res.shape[0] == 1)
+                return res.values[0]
+
+            assert(my_mapping(key2, input2, other_key2) == 9830)
+            assert(my_mapping(key, input, other_key) == "AJ Auxerre")
+            # print(my_mapping(key2, input2, other_key2))
+            # print(my_mapping(key, input, other_key))
+
+
+
+
+            # TODO: fct hotrepresentation -> team_id representation
+            # TODO: fct team_id serie -> hotrepresentation
+
 
             # print(involved_teams.info())
             # print(involved_teams.head(3))
