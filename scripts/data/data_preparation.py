@@ -24,9 +24,23 @@ def main():
     #     print(n, Counter(team_data[n]))
 
     df1 = pd.DataFrame({'A': [1, 2, 3, 4, 5], 'B': ['a', 'b', 'c', 'd', 'e']})
-    df2 = pd.DataFrame({'AA': ['pouet1', 'pouet2', 'pouet3'], 'BB': ['d', 'b', 'a']})
-    print(df1['B'].isin(df2['BB']))
-    print(list(df1['B']))
+    # df2 = pd.DataFrame({'AA': ['pouet1', 'pouet2', 'pouet3'], 'BB': ['d', 'b', 'a']})
+    # print(df1['B'].isin(df2['BB']))
+    # print(list(df1['B']))
+    # for el in df1.values:
+    #     print(el.__class__)
+    # team_id_to_name, team_name_to_id = dict(), dict()
+    # for index, row in df1.iterrows():
+    #     team_id = row['A']
+    #     corresponding_name = row['B']
+    #     #corresponding_names = df1[df1['A'] == team_id]['B']
+    #     #assert (corresponding_names.shape[0] == 1)
+    #     #corresponding_name = corresponding_names[0]
+    #     team_id_to_name[team_id] = corresponding_name
+    #     team_name_to_id[corresponding_name] = team_id
+    # assert(len(team_id_to_name) == len(team_name_to_id))
+    # print(team_name_to_id)
+    # print(team_id_to_name)
 
     # all_countries =['England', 'France', 'Spain', 'Italy', 'Germany', 'Netherlands', 'Portugal', 'Poland', 'Scotland',
     #                 'Belgium', 'Switzerland']
@@ -61,43 +75,58 @@ def main():
             #     print("----------")
             #     print(fifa_data.shape)
 
+            vect_matches, _, _, _ = matches_vectorization(matches, team_data, additional_features=["season", "stage"])
+            print(matches.head(5))
+
+
             mask_home = team_data['team_api_id'].isin(matches['home_team_api_id'])
             mask_away = team_data['team_api_id'].isin(matches['away_team_api_id'])
-            involved_teams = team_data[mask_home | mask_away]
-            print(involved_teams.head(3))
-            print(involved_teams.shape)
+            team_universe = team_data[mask_home | mask_away]
+            print(team_universe.head(3))
+            print(team_universe.shape)
 
             #team_dummies = pd.get_dummies(matches['home_team_api_id'])
 
-            prep_dummy = matches['home_team_api_id'].astype('category', categories=involved_teams['team_api_id'])
-            dummy_matches_home_teams = pd.get_dummies(prep_dummy).astype('int')
+            prep_dummy_home_matches = matches['home_team_api_id'].astype('category',
+                                                                         categories=team_universe['team_api_id'])
+            dummy_matches_home_teams = pd.get_dummies(prep_dummy_home_matches).astype('int')
+            prep_dummy_away_matches = matches['away_team_api_id'].astype('category',
+                                                                         categories=team_universe['team_api_id'])
+            dummy_matches_away_teams = pd.get_dummies(prep_dummy_away_matches).astype('int')
 
             initial_serie = dummy_matches_home_teams.idxmax(axis=1)
             print(initial_serie.equals(initial_serie))
             print("####")
-            print(prep_dummy)
-            print(prep_dummy.shape)
+            print(prep_dummy_home_matches)
+            print(prep_dummy_home_matches.shape)
+            print(dummy_matches_away_teams.head(5))
+            print(dummy_matches_away_teams.shape)
             # print(initial_serie)
             # print("####")
             # print(matches['home_team_api_id'])
 
-            my_team_long_name = "FC Nantes"  # team_api_id = 9830
-            my_team_api_id = 8583  # "AJ Auxerre"
-            key, input, other_key = "team_api_id", my_team_api_id, "team_long_name"
-            key2, input2, other_key2 = "team_long_name", my_team_long_name, "team_api_id"
+            # my_team_long_name = "FC Nantes"  # team_api_id = 9830
+            # my_team_api_id = 8583  # "AJ Auxerre"
+            # key, input, other_key = "team_api_id", my_team_api_id, "team_long_name"
+            # key2, input2, other_key2 = "team_long_name", my_team_long_name, "team_api_id"
+            #
+            # # mapping use team universe, which is "involved_teams"
+            # def my_mapping(key, input, other_key):
+            #     res = team_universe[team_universe[key] == input][other_key]
+            #     assert(res.shape[0] == 1)
+            #     return res.values[0]
+            #
+            # assert(my_mapping(key2, input2, other_key2) == 9830)
+            # assert(my_mapping(key, input, other_key) == "AJ Auxerre")
 
-            # mapping use team universe, which is "involved_teams"
-            def my_mapping(key, input, other_key):
-                res = involved_teams[involved_teams[key] == input][other_key]
-                assert(res.shape[0] == 1)
-                return res.values[0]
-
-            assert(my_mapping(key2, input2, other_key2) == 9830)
-            assert(my_mapping(key, input, other_key) == "AJ Auxerre")
-            # print(my_mapping(key2, input2, other_key2))
-            # print(my_mapping(key, input, other_key))
-
-
+            # create mapping dictionaries
+            team_id_to_name, team_name_to_id = dict(), dict()
+            for index, row in team_universe.iterrows():
+                team_id_to_name[row["team_api_id"]] = row["team_long_name"]
+                team_name_to_id[row["team_long_name"]] = row["team_api_id"]
+            assert(len(team_id_to_name) == len(team_name_to_id))
+            print(team_id_to_name)
+            print(team_name_to_id)
 
 
             # TODO: fct hotrepresentation -> team_id representation
@@ -133,6 +162,57 @@ def main():
     # # Creating cross validation data splits
     # cv_sets = model_selection.StratifiedShuffleSplit(n_splits=5, test_size=0.20, random_state=5)
     # cv_sets.get_n_splits(X_train, y_train)
+
+
+def matches_vectorization(match_data, team_data, additional_features=None, replace_id_by_names=True):
+    mask_home = team_data['team_api_id'].isin(match_data['home_team_api_id'])
+    mask_away = team_data['team_api_id'].isin(match_data['away_team_api_id'])
+    team_universe = team_data[mask_home | mask_away]
+    # print(team_universe.head(3))
+    # print(team_universe.shape)
+    #print(match_data.head(5))
+
+    team_id_to_name, team_name_to_id = dict(), dict()
+    for index, row in team_universe.iterrows():
+        team_id_to_name[row["team_api_id"]] = row["team_long_name"]
+        team_name_to_id[row["team_long_name"]] = row["team_api_id"]
+    assert (len(team_id_to_name) == len(team_name_to_id))
+    # print(team_id_to_name)
+    # print(team_name_to_id)
+
+    if replace_id_by_names:
+        match_data_tmp = match_data.rename(columns={'id': 'id_match'})
+        # replace home team id by its name
+        match_data_tmp = match_data_tmp.merge(team_data, left_on="home_team_api_id", right_on="team_api_id")
+        team_labels_to_drop = list(set(team_data.columns.values) - {'team_long_name'}) + ["home_team_api_id"]
+        match_data_tmp = match_data_tmp.drop(labels=team_labels_to_drop, axis=1)
+        match_data_tmp = match_data_tmp.rename(columns={'team_long_name': 'home_team'})
+        # replace away team id by its name
+        match_data_tmp = match_data_tmp.merge(team_data, left_on="away_team_api_id", right_on="team_api_id")
+        team_labels_to_drop = list(set(team_data.columns.values) - {'team_long_name'}) + ["away_team_api_id"]
+        match_data_tmp = match_data_tmp.drop(labels=team_labels_to_drop, axis=1)
+        match_data_tmp = match_data_tmp.rename(columns={'team_long_name': 'away_team'})
+        match_data_tmp = match_data_tmp.sort_values('id_match')
+        match_data_tmp = match_data_tmp.reset_index()
+    else:
+        match_data_tmp = match_data.reset_index()
+    #print(match_data_tmp.head(5))
+
+    kept_features = ["home_team_goal", "away_team_goal"]
+    if replace_id_by_names:
+        kept_features += ['home_team', 'away_team']
+        transformed_featured = ['home_team', 'away_team']
+    else:
+        kept_features += ['home_team_api_id', 'away_team_api_id']
+        transformed_featured = ['home_team_api_id', 'away_team_api_id']
+    if additional_features: kept_features += additional_features
+    removed_features = list(set(match_data_tmp.columns.values) - set(kept_features))
+    vect_matches = match_data_tmp.drop(labels=removed_features, axis=1)
+    #print(vect_matches.head(5))
+    vect_matches = pd.get_dummies(vect_matches, columns=transformed_featured)
+    #print(vect_matches.head(5))
+
+    return vect_matches, team_universe, team_id_to_name, team_name_to_id
 
 
 def first_data_preparation(data_path):

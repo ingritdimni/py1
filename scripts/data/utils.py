@@ -383,10 +383,10 @@ def train_calibrate_predict(clf, dm_reduction, X_train, y_train, X_calibrate, y_
     # Print the results of prediction for both training and testing
     print("Score of {} for training set: {:.4f}.".format(clf.__class__.__name__,
                                                          predict_labels(clf, best_pipe, X_train, y_train)))
-    print("Score of {} for test set: {:.4f}.".format(clf.__class__.__name__,
+    print("Score of {} for data set: {:.4f}.".format(clf.__class__.__name__,
                                                      predict_labels(clf, best_pipe, X_test, y_test)))
 
-    # Return classifier, dm reduction, and label predictions for train and test set
+    # Return classifier, dm reduction, and label predictions for train and data set
     return clf, best_pipe.named_steps['dm_reduce'], predict_labels(clf, best_pipe, X_train, y_train), predict_labels(
         clf, best_pipe, X_test, y_test)
 
@@ -719,7 +719,7 @@ def find_best_classifier(classifiers, dm_reductions, scorer, X_t, y_t, X_c, y_c,
 
         # Loop through classifiers
         for clf in clfs:
-            # Grid search, calibrate, and test the classifier
+            # Grid search, calibrate, and data the classifier
             clf, dm_reduce, train_score, test_score = train_calibrate_predict(clf=clf, dm_reduction=dm, X_train=X_t,
                                                                               y_train=y_t,
                                                                               X_calibrate=X_c, y_calibrate=y_c,
@@ -869,4 +869,4 @@ def plot_bookkeeper_cf_matrix(matches, bookkeepers, path, verbose=False, normali
 
     # Print classification report and accuracy score of bookkeepers
     print(classification_report(y_test, y_pred))
-    print("Bookkeeper score for test set: {:.4f}.".format(accuracy_score(y_test, y_pred)))
+    print("Bookkeeper score for data set: {:.4f}.".format(accuracy_score(y_test, y_pred)))
