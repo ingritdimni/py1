@@ -98,28 +98,28 @@ def get_fifa_stats(match, player_stats):
 
 
 def get_fifa_data(matches, player_stats, path=None, data_exists=False):
-    ''' Gets fifa data for all matches. '''
+    ''' Gets fifa all for all matches. '''
 
-    # Check if fifa data already exists
+    # Check if fifa all already exists
     if data_exists:
         fifa_data = pd.read_pickle(path)
 
     else:
-        print("Collecting fifa data for each match...")
+        print("Collecting fifa all for each match...")
         start = time()
 
         # Apply get_fifa_stats for each match
         fifa_data = matches.apply(lambda x: get_fifa_stats(x, player_stats), axis=1)
 
         end = time()
-        print("Fifa data collected in {:.1f} seconds".format(end - start))
+        print("Fifa all collected in {:.1f} seconds".format(end - start))
 
     # Return fifa_data
     return fifa_data
 
 
 def get_overall_fifa_rankings(fifa, get_overall=False):
-    ''' Get overall fifa rankings from fifa data. '''
+    ''' Get overall fifa rankings from fifa all. '''
 
     temp_data = fifa
 
@@ -136,7 +136,7 @@ def get_overall_fifa_rankings(fifa, get_overall=False):
         temp_data = fifa.drop(cols.columns, axis=1)
         data = temp_data
 
-    # Return data
+    # Return all
     return data
 
 
@@ -168,11 +168,11 @@ def get_last_matches_against_eachother(matches, date, home_team, away_team, x=10
         last_matches = total_matches[total_matches.date < date].sort_values(by='date', ascending=False).iloc[
                        0:total_matches.shape[0], :]
 
-        # Check for error in data
+        # Check for error in all
         if (last_matches.shape[0] > x):
             print("Error in obtaining matches")
 
-    # Return data
+    # Return all
     return last_matches
 
 
@@ -240,7 +240,7 @@ def get_match_features(match, matches, n_history=10, n_common_history=3):
     home_goals_conceided = get_goals_conceided(matches_home_team, home_team)
     away_goals_conceided = get_goals_conceided(matches_away_team, away_team)
 
-    # Define result data frame
+    # Define result all frame
     result = pd.DataFrame()
 
     # Define ID features
@@ -292,7 +292,7 @@ def create_feables(matches, fifa, bookkeepers, get_overall=False, horizontal=Tru
         print("Match labels generated in {:.1f} seconds".format(end - start))
 
     if verbose:
-        print("Generating bookkeeper data...")
+        print("Generating bookkeeper all...")
     start = time()
 
     # Get bookkeeper quotas for all matches
@@ -300,7 +300,7 @@ def create_feables(matches, fifa, bookkeepers, get_overall=False, horizontal=Tru
     bk_data.loc[:, 'match_api_id'] = matches.loc[:, 'match_api_id']
     end = time()
     if verbose:
-        print("Bookkeeper data generated in {:.1f} seconds".format(end - start))
+        print("Bookkeeper all generated in {:.1f} seconds".format(end - start))
 
     # Merges features and labels into one frame
     features = pd.merge(match_stats, fifa_stats, on='match_api_id', how='left')
@@ -310,13 +310,13 @@ def create_feables(matches, fifa, bookkeepers, get_overall=False, horizontal=Tru
     # Drop NA values
     feables.dropna(inplace=True)
 
-    # Return preprocessed data
+    # Return preprocessed all
     return feables
 
 
 def train_classifier(clf, dm_reduction, X_train, y_train, cv_sets, params, scorer, jobs, use_grid_search=True,
                      best_components=None, best_params=None):
-    ''' Fits a classifier to the training data. '''
+    ''' Fits a classifier to the training all. '''
 
     # Start the clock, train the classifier, then stop the clock
     start = time()
@@ -383,10 +383,10 @@ def train_calibrate_predict(clf, dm_reduction, X_train, y_train, X_calibrate, y_
     # Print the results of prediction for both training and testing
     print("Score of {} for training set: {:.4f}.".format(clf.__class__.__name__,
                                                          predict_labels(clf, best_pipe, X_train, y_train)))
-    print("Score of {} for data set: {:.4f}.".format(clf.__class__.__name__,
+    print("Score of {} for all set: {:.4f}.".format(clf.__class__.__name__,
                                                      predict_labels(clf, best_pipe, X_test, y_test)))
 
-    # Return classifier, dm reduction, and label predictions for train and data set
+    # Return classifier, dm reduction, and label predictions for train and all set
     return clf, best_pipe.named_steps['dm_reduce'], predict_labels(clf, best_pipe, X_train, y_train), predict_labels(
         clf, best_pipe, X_test, y_test)
 
@@ -417,19 +417,19 @@ def convert_odds_to_prob(match_odds):
     probs.loc[:, 'Draw'] = draw_prob / total_prob
     probs.loc[:, 'Defeat'] = loss_prob / total_prob
 
-    # Return probs and meta data
+    # Return probs and meta all
     return probs
 
 
 def get_bookkeeper_data(matches, bookkeepers, horizontal=True):
-    ''' Aggregates bookkeeper data for all matches and bookkeepers. '''
+    ''' Aggregates bookkeeper all for all matches and bookkeepers. '''
 
     bk_data = pd.DataFrame()
 
     # Loop through bookkeepers
     for bookkeeper in bookkeepers:
 
-        # Find columns containing data of bookkeeper
+        # Find columns containing all of bookkeeper
         temp_data = matches.loc[:, (matches.columns.str.contains(bookkeeper))]
         temp_data.loc[:, 'bookkeeper'] = str(bookkeeper)
         temp_data.loc[:, 'match_api_id'] = matches.loc[:, 'match_api_id']
@@ -442,10 +442,10 @@ def get_bookkeeper_data(matches, bookkeepers, horizontal=True):
         temp_data.loc[:, 'Draw'] = pd.to_numeric(temp_data['Draw'])
         temp_data.loc[:, 'Defeat'] = pd.to_numeric(temp_data['Defeat'])
 
-        # Check if data should be aggregated horizontally
+        # Check if all should be aggregated horizontally
         if (horizontal == True):
 
-            # Convert data to probs
+            # Convert all to probs
             temp_data = convert_odds_to_prob(temp_data)
             temp_data.drop('match_api_id', axis=1, inplace=True)
             temp_data.drop('bookkeeper', axis=1, inplace=True)
@@ -456,35 +456,35 @@ def get_bookkeeper_data(matches, bookkeepers, horizontal=True):
             defeat_name = bookkeeper + "_" + "Defeat"
             temp_data.columns.values[:3] = [win_name, draw_name, defeat_name]
 
-            # Aggregate data
+            # Aggregate all
             bk_data = pd.concat([bk_data, temp_data], axis=1)
         else:
             # Aggregate vertically
             bk_data = bk_data.append(temp_data, ignore_index=True)
 
-    # If horizontal add match api id to data
+    # If horizontal add match api id to all
     if (horizontal == True):
         temp_data.loc[:, 'match_api_id'] = matches.loc[:, 'match_api_id']
 
-    # Return bookkeeper data
+    # Return bookkeeper all
     return bk_data
 
 
 def get_bookkeeper_probs(matches, bookkeepers, horizontal=False):
-    ''' Get bookkeeper data and convert to probabilities for vertical aggregation. '''
+    ''' Get bookkeeper all and convert to probabilities for vertical aggregation. '''
 
-    # Get bookkeeper data
+    # Get bookkeeper all
     data = get_bookkeeper_data(matches, bookkeepers, horizontal=False)
 
     # Convert odds to probabilities
     probs = convert_odds_to_prob(data)
 
-    # Return data
+    # Return all
     return probs
 
 
 def plot_confusion_matrix(y_test, X_test, clf, dim_reduce, path, cmap=plt.cm.Blues, normalize=False):
-    ''' Plot confusion matrix for given classifier and data. '''
+    ''' Plot confusion matrix for given classifier and all. '''
 
     # Define label names and get confusion matrix values
     labels = ["Win", "Draw", "Defeat"]
@@ -665,7 +665,7 @@ def execute_bets(bet_choices, matches, verbose=False):
 
 
 def explore_data(features, inputs, path):
-    ''' Explore data by plotting KDE graphs. '''
+    ''' Explore all by plotting KDE graphs. '''
 
     # Define figure subplots
     fig = plt.figure(1)
@@ -719,7 +719,7 @@ def find_best_classifier(classifiers, dm_reductions, scorer, X_t, y_t, X_c, y_c,
 
         # Loop through classifiers
         for clf in clfs:
-            # Grid search, calibrate, and data the classifier
+            # Grid search, calibrate, and all the classifier
             clf, dm_reduce, train_score, test_score = train_calibrate_predict(clf=clf, dm_reduction=dm, X_train=X_t,
                                                                               y_train=y_t,
                                                                               X_calibrate=X_c, y_calibrate=y_c,
@@ -776,7 +776,7 @@ def optimize_betting(best_clf, best_dm_reduce, bk_cols_selected, bk_cols, match_
                      n_samples, sample_size, parameter_1_grid, parameter_2_grid, verbose=False):
     ''' Tune parameters of bet selection algorithm. '''
 
-    # Generate data samples
+    # Generate all samples
     samples = []
     for i in range(0, n_samples):
         sample = match_data.sample(n=sample_size, random_state=42)
@@ -833,7 +833,7 @@ def plot_bookkeeper_cf_matrix(matches, bookkeepers, path, verbose=False, normali
 
     if verbose == True: print("Plotting confusion matrix...")
 
-    # Format data
+    # Format all
     results = pd.merge(y_pred_temp, y_test_temp, on='match_api_id', how='left')
     y_test = results.loc[:, 'label']
     y_pred = results.loc[:, 'bk_label']
@@ -869,4 +869,4 @@ def plot_bookkeeper_cf_matrix(matches, bookkeepers, path, verbose=False, normali
 
     # Print classification report and accuracy score of bookkeepers
     print(classification_report(y_test, y_pred))
-    print("Bookkeeper score for data set: {:.4f}.".format(accuracy_score(y_test, y_pred)))
+    print("Bookkeeper score for all set: {:.4f}.".format(accuracy_score(y_test, y_pred)))

@@ -1,6 +1,7 @@
 import numpy as np
 import copy
 import pandas as pd
+from poisson import PoissonDistrib
 
 DATA_PATH = "D:/Football_betting/artificial_data/"
 
@@ -8,9 +9,11 @@ DATA_PATH = "D:/Football_betting/artificial_data/"
 def main():
     nb_teams = 18
     nb_seasons = 10
-    past_results, actual_team_params = create_minimalist_match_results(nb_teams, nb_seasons, seed=0)
-    print(past_results.tail(20))
-    past_results.to_csv(DATA_PATH + "poisson_results.csv")
+    df_results, df_probas, actual_team_params = create_minimalist_match_results(nb_teams, nb_seasons, seed=0)
+    print(df_results.tail(20))
+    print(df_probas.tail(20))
+    df_results.to_csv(DATA_PATH + "poisson_results.csv", index=False)
+    df_results.to_csv(DATA_PATH + "model_match_probabilities.csv", index=False)
 
 
 def create_minimalist_match_results(nb_teams, nb_seasons, seed=0):
@@ -25,7 +28,9 @@ def create_minimalist_match_results(nb_teams, nb_seasons, seed=0):
     for s in range(nb_seasons):
         seasons_calendars[s], base_calendar = create_calendar(nb_teams, base_calendar=base_calendar)
 
-    df = pd.DataFrame(columns=['season', 'stage', 'home_team_goal', 'away_team_goal', 'home_team_id', 'away_team_id'])
+    df_results = pd.DataFrame(columns=['season', 'stage', 'home_team_goal', 'away_team_goal', 'home_team_id',
+                                       'away_team_id'])
+    df_probas = pd.DataFrame(columns=['W', 'D', 'L'])
     for s in range(nb_seasons):
         for d in range(len(seasons_calendars[s])):
             matches = seasons_calendars[s][d]
@@ -33,20 +38,29 @@ def create_minimalist_match_results(nb_teams, nb_seasons, seed=0):
                 home_param = teams_params[home_i]
                 away_param = teams_params[away_i]
                 home_goals, away_goals = play_match(home_param, away_param)
-                df = df.append({'season': s+1, 'stage': d+1, 'home_team_goal': home_goals, 'away_team_goal': away_goals,
-                                'home_team_id': home_i, 'away_team_id': away_i}, ignore_index=True)
-
-    return df, teams_params
+                df_results = df_results.append({'season': s+1, 'stage': d+1, 'home_team_goal': home_goals,
+                                                'away_team_goal': away_goals, 'home_team_id': home_i,
+                                                'away_team_id': away_i}, ignore_index=True)
+                win, draw, loss = perfect_prediction(home_i, away_i, teams_params)
+                df_probas = df_probas.append({'W': win, 'D': draw, 'L': loss}, ignore_index=True)
+    assert(df_probas.shape[0] == df_results.shape[0])
+    return df_results, df_probas, teams_params
 
 
 def play_match(home_param, away_param, seed=None):
+    """ creates a match result considering each team param represents its ability to score (poisson distrib)"""
     if seed: np.random.seed(seed)
     home_goals = np.random.poisson(home_param)
     away_goals = np.random.poisson(away_param)
     return home_goals, away_goals
 
 
-def create_teams(nb_teams, param_min=0.8, param_max=2.5):
+def perfect_prediction(team_home, team_away, teams_param):
+    """ returns perfect prediction if match has been played considering poisson distrib for scoring (see play match)"""
+    return PoissonDistrib.match_outcomes_probabilities(teams_param[team_home], teams_param[team_away])
+
+
+def create_teams(nb_teams, param_min=0.7, param_max=2.8):
     # create team names
     teams = [i+1 for i in range(nb_teams)]
 
@@ -124,7 +138,8 @@ def create_calendar(nb_teams, base_calendar=None, seed=None):
 
     # second part of season is copied from 1rst part
     for d in range(nb_teams-1):
-        my_calendar[nb_teams+d-1] = list(reversed(my_calendar[nb_teams-(d+1)-1]))
+        symetric_matches = my_calendar[nb_teams - (d + 1) - 1]
+        my_calendar[nb_teams+d-1] = [[m[1], m[0]] for m in symetric_matches]
 
     return my_calendar, base_calendar
 
