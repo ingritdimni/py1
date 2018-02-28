@@ -1,4 +1,5 @@
 import math
+import numpy as np
 from scipy.stats import poisson
 
 SOLVER_DEBUG_MODE = False
@@ -21,7 +22,7 @@ def solver(f, x_min, x_max, eps):
         return c
 
 
-class PoissonDistrib(object):
+class PoissonHelper(object):
 
     default_min_lambda = 0.05
     default_max_lambda = 8.
@@ -39,12 +40,12 @@ class PoissonDistrib(object):
             p *= lambda_param
             p /= i + 1
         return p
-        # aternative: # return poisson.pmf
+        # aternative: # return poisson.pmf(k_events, lambda_param)
 
     @staticmethod
     def match_outcomes_probabilities(lambda_param_1, lambda_param_2, k_max=20):
-        table_1 = PoissonDistrib.poisson_proba_table(lambda_param_1, k_max)
-        table_2 = PoissonDistrib.poisson_proba_table(lambda_param_2, k_max)
+        table_1 = PoissonHelper.poisson_proba_table(lambda_param_1, k_max)
+        table_2 = PoissonHelper.poisson_proba_table(lambda_param_2, k_max)
 
         p_home_v, p_draw, p_home_d = 0., 0., 0.
         for k in range(k_max + 1):
@@ -56,10 +57,18 @@ class PoissonDistrib(object):
 
         return p_home_v, p_draw, p_home_d
 
+    @staticmethod
+    def play_match(home_param, away_param, seed=None):
+        """ creates a match result considering each team param represents its ability to score (poisson distrib)"""
+        if seed: np.random.seed(seed)
+        home_goals = np.random.poisson(home_param)
+        away_goals = np.random.poisson(away_param)
+        return home_goals, away_goals
+
     # approximated (shifted part)
     @staticmethod
     def poisson_proba_table(lambda_param, k_max=10):
-        unshifted_prob = [PoissonDistrib.poisson_probability(k, lambda_param) for k in range(k_max + 1)]
+        unshifted_prob = [PoissonHelper.poisson_probability(k, lambda_param) for k in range(k_max + 1)]
         total_prob = sum(unshifted_prob)
         shifted_prob = [prob / total_prob for prob in unshifted_prob]
         return shifted_prob
@@ -71,13 +80,13 @@ class PoissonDistrib(object):
         p1, p2, p3 = target_probabilities
 
         def g(lambda_param_1):
-            f = lambda x: PoissonDistrib.match_outcomes_probabilities(lambda_param_1, x)[0] - p1
+            f = lambda x: PoissonHelper.match_outcomes_probabilities(lambda_param_1, x)[0] - p1
             lambda_param_2 = solver(f, absolute_min_lambda, absolute_max_lambda, precision)
-            return PoissonDistrib.match_outcomes_probabilities(lambda_param_1, lambda_param_2)[1] - p2
+            return PoissonHelper.match_outcomes_probabilities(lambda_param_1, lambda_param_2)[1] - p2
 
         # print " \lambda_1_min", lambda_1_min, "     lambda_1_max", lambda_1_max
         lambda_param_1 = solver(g, lambda_1_min, lambda_1_max, precision)
-        lambda_param_2 = solver(lambda x: PoissonDistrib.match_outcomes_probabilities(lambda_param_1, x)[0] - p1,
+        lambda_param_2 = solver(lambda x: PoissonHelper.match_outcomes_probabilities(lambda_param_1, x)[0] - p1,
                                 absolute_min_lambda, absolute_max_lambda, precision)
         return lambda_param_1, lambda_param_2
 
@@ -89,9 +98,9 @@ class PoissonDistrib(object):
         lambda_sub_range = lambda_total_possible_range / nb_max_iterations
         for i in range(nb_max_iterations):
             try:
-                params = PoissonDistrib.optimal_poisson_param_given_range(target_probabilities, absolute_min_lambda + i * lambda_sub_range,
-                                                                          absolute_min_lambda + (i + 1) * lambda_sub_range, precision,
-                                                                          absolute_min_lambda, absolute_max_lambda)
+                params = PoissonHelper.optimal_poisson_param_given_range(target_probabilities, absolute_min_lambda + i * lambda_sub_range,
+                                                                         absolute_min_lambda + (i + 1) * lambda_sub_range, precision,
+                                                                         absolute_min_lambda, absolute_max_lambda)
                 return params
             except:
                 continue

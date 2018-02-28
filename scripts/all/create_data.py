@@ -1,27 +1,65 @@
 import numpy as np
 import copy
 import pandas as pd
-from poisson import PoissonDistrib
+import matplotlib.pyplot as plt
+from poisson import PoissonHelper
 
-DATA_PATH = "D:/Football_betting/artificial_data/"
+
+DATA_PATH = "D:/Football_betting/artificial_data/"  # default export path, might be overwritten
+DISPLAY_GRAPH = True
 
 
-def main():
+def test_param_dynamic():
+    np.random.seed(0)
+    nb_diffused_seasons = 3
+    nb_steps_interseason = 10
+    nb_teams = 18
+    team_params = create_teams(nb_teams)
+    cur_param = team_params
+    #params_history = {t: [team_params[t], ] for t in range(nb_teams+1)[1:]}
+    params_history = {t: list() for t in range(nb_teams + 1)[1:]} # excludes first params
+    for s in range(nb_diffused_seasons):
+        for step in range(nb_steps_interseason):  # teams change at interseason --> more volatility ?!
+            cur_param = update_teams_params(cur_param)
+        for i in range((nb_teams-1) * 2):
+            new_param = update_teams_params(cur_param)
+            for t in range(nb_teams+1)[1:]:
+                params_history[t].append(new_param[t])
+            cur_param = new_param
+
+    display_param_history(params_history, nb_diffused_seasons)
+
+
+def export_stationary_poisson_match_results(path=DATA_PATH):
+    """" exports stationary poisson match results and probabilities """
     nb_teams = 18
     nb_seasons = 10
-    df_results, df_probas, actual_team_params = create_minimalist_match_results(nb_teams, nb_seasons, seed=0)
+    df_results, df_probas, actual_team_params = create_stationary_poisson_match_results(nb_teams, nb_seasons, seed=0)
     print(df_results.tail(20))
     print(df_probas.tail(20))
-    df_results.to_csv(DATA_PATH + "poisson_results.csv", index=False)
-    df_results.to_csv(DATA_PATH + "model_match_probabilities.csv", index=False)
+    df_results.to_csv(path + "stationary_poisson_results.csv", index=False)
+    df_probas.to_csv(path + "stationary_poisson_results_probabilities.csv", index=False)
 
 
-def create_minimalist_match_results(nb_teams, nb_seasons, seed=0):
+def export_dynamic_poisson_match_results(path=DATA_PATH):
+    """" exports dynamic poisson match results and probabilities """
+    nb_teams = 18
+    nb_seasons = 10
+    df_results, df_probas, params_history = create_dynamic_poisson_match_results(nb_teams, nb_seasons,
+                                                                                 nb_fixed_seasons=1, seed=0)
+    print(df_results.tail(20))
+    print(df_probas.tail(20))
+    df_results.to_csv(path + "dynamic_poisson_results.csv", index=False)
+    df_probas.to_csv(path + "dynamic_poisson_results_probabilities.csv", index=False)
+
+    display_param_history(params_history, nb_seasons)
+
+
+def create_stationary_poisson_match_results(nb_teams, nb_seasons, param_min=0.7, param_max=2.75, seed=None):
     """ Creates nb_teams teams with different poisson params representing their ability to score.
     Then simulates nb_seasons seasons, knowing that in each season each team plays against each other twice"""
-    np.random.seed(seed)
-
-    teams_params = create_teams(nb_teams)
+    if seed: np.random.seed(seed)
+    teams_params = create_teams(nb_teams, param_min, param_max)
 
     seasons_calendars = dict()
     base_calendar = None  # trick to avoid useless long computations
@@ -37,7 +75,7 @@ def create_minimalist_match_results(nb_teams, nb_seasons, seed=0):
             for home_i, away_i in matches:
                 home_param = teams_params[home_i]
                 away_param = teams_params[away_i]
-                home_goals, away_goals = play_match(home_param, away_param)
+                home_goals, away_goals = PoissonHelper.play_match(home_param, away_param)
                 df_results = df_results.append({'season': s+1, 'stage': d+1, 'home_team_goal': home_goals,
                                                 'away_team_goal': away_goals, 'home_team_id': home_i,
                                                 'away_team_id': away_i}, ignore_index=True)
@@ -47,20 +85,98 @@ def create_minimalist_match_results(nb_teams, nb_seasons, seed=0):
     return df_results, df_probas, teams_params
 
 
-def play_match(home_param, away_param, seed=None):
-    """ creates a match result considering each team param represents its ability to score (poisson distrib)"""
+def create_dynamic_poisson_match_results(nb_teams, nb_seasons, param_min=0.6, param_max=3., nb_jumps_start_season=10,
+                                         nb_fixed_seasons=0, update_param_a=0.02, update_param_b = 0.01,
+                                         update_avg_param=1.7, seed=None):
+    """ Creates nb_teams teams with different poisson params representing their ability to score.
+    Then simulates nb_seasons seasons, knowing that in each season each team plays against each other twice
+    uses poisson param dynamic as described in update_teams_params """
+    assert(nb_fixed_seasons <= nb_seasons)  # params do not move during nb_fixed seasons starting from the end
     if seed: np.random.seed(seed)
-    home_goals = np.random.poisson(home_param)
-    away_goals = np.random.poisson(away_param)
-    return home_goals, away_goals
+    teams_params = create_teams(nb_teams, param_min, param_max)
+
+    seasons_calendars = dict()
+    base_calendar = None  # trick to avoid useless long computations
+    for s in range(nb_seasons):
+        seasons_calendars[s], base_calendar = create_calendar(nb_teams, base_calendar=base_calendar)
+
+    df_results = pd.DataFrame(columns=['season', 'stage', 'home_team_goal', 'away_team_goal', 'home_team_id',
+                                       'away_team_id'])
+    df_probas = pd.DataFrame(columns=['W', 'D', 'L'])
+    params_history = {t: list() for t in range(nb_teams + 1)[1:]}  # excludes first params
+    for s in range(nb_seasons):
+        for step in range(nb_jumps_start_season):  # teams change at interseason --> more volatility ?!
+            teams_params = update_teams_params(teams_params, update_param_a, update_param_b, param_min, param_max,
+                                               update_avg_param)
+        for d in range(len(seasons_calendars[s])):
+
+            # save current params
+            for t in range(nb_teams+1)[1:]:
+                params_history[t].append(teams_params[t])
+
+            matches = seasons_calendars[s][d]
+            for home_i, away_i in matches:
+
+                home_param = teams_params[home_i]
+                away_param = teams_params[away_i]
+                home_goals, away_goals = PoissonHelper.play_match(home_param, away_param)
+                df_results = df_results.append({'season': s+1, 'stage': d+1, 'home_team_goal': home_goals,
+                                                'away_team_goal': away_goals, 'home_team_id': home_i,
+                                                'away_team_id': away_i}, ignore_index=True)
+                win, draw, loss = perfect_prediction(home_i, away_i, teams_params)
+                df_probas = df_probas.append({'W': win, 'D': draw, 'L': loss}, ignore_index=True)
+                if s < (nb_seasons - nb_fixed_seasons):  # if param must be updated
+                    teams_params = update_teams_params(teams_params, update_param_a, update_param_b, param_min,
+                                                       param_max, update_avg_param)  # update params
+    assert(df_probas.shape[0] == df_results.shape[0])
+    return df_results, df_probas, params_history
+
+
+def display_param_history(params_history, nb_diffused_seasons=None):
+    nb_teams = len(params_history)
+    fig, ax = plt.subplots(1, 1)
+    for t in range(nb_teams+1)[1:]:
+        ax.plot(params_history[t], label="param_team_" + str(t))
+    if nb_diffused_seasons:  # to add vertical line between seasons (optional)
+        for s in range(nb_diffused_seasons)[1:]:
+            plt.axvline(x=s * (nb_teams-1) * 2)
+    #legend = ax.legend(loc='upper left', shadow=True)
+
+    if DISPLAY_GRAPH: plt.show()
+
+
+def update_teams_params(teams_params, a=0.02, b=0.01, min_param=0.6, max_param=3., target_sum=1.7, seed=None):
+    """ creates a new set of params according to formula: new_param := noise * (a * old_param + b).
+    teams_params input is a dictionary of params. returns a dictionary of updated params"""
+    if seed: np.random.seed(seed)
+    noise = np.random.randn(len(teams_params))
+    all_teams = list(teams_params.keys())
+    nb_teams = len(all_teams)
+    avg, new_params = 0, dict()
+
+    # random step in param
+    for i in range(nb_teams):
+        new_params[all_teams[i]] = teams_params[all_teams[i]] + noise[i] * (a * teams_params[all_teams[i]] + b)
+        avg += new_params[all_teams[i]] / nb_teams
+
+    # normalization ratio of teams params (to avoid all very strong or very weak)
+    ratio = target_sum / avg if target_sum else 1.
+
+    # normalization attempt + respect of bounds anyway
+    for i in range(nb_teams):
+        new_params[all_teams[i]] = max(min(new_params[all_teams[i]] * ratio, max_param), min_param)
+
+    return new_params
 
 
 def perfect_prediction(team_home, team_away, teams_param):
     """ returns perfect prediction if match has been played considering poisson distrib for scoring (see play match)"""
-    return PoissonDistrib.match_outcomes_probabilities(teams_param[team_home], teams_param[team_away])
+    return PoissonHelper.match_outcomes_probabilities(teams_param[team_home], teams_param[team_away])
 
 
-def create_teams(nb_teams, param_min=0.7, param_max=2.8):
+def create_teams(nb_teams, param_min=0.7, param_max=2.75):
+    """ create a dictionary of nb_teams teams, where key is int from 1 to nb_team, and value is associated param.
+    Params are chosen regularly uniformly within given range"""
     # create team names
     teams = [i+1 for i in range(nb_teams)]
 
@@ -145,4 +261,6 @@ def create_calendar(nb_teams, base_calendar=None, seed=None):
 
 
 if __name__ == "__main__":
-    main()
+    #test_param_dynamic()
+    export_dynamic_poisson_match_results()
+    #export_stationary_poisson_match_results()
