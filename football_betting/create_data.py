@@ -6,60 +6,32 @@ from poisson import PoissonHelper
 
 
 DATA_PATH = "D:/Football_betting/artificial_data/"  # default export path, might be overwritten
-DISPLAY_GRAPH = True
 
-
-def test_param_dynamic():
-    np.random.seed(0)
-    nb_diffused_seasons = 3
-    nb_steps_interseason = 10
-    nb_teams = 18
-    team_params = create_teams(nb_teams)
-    cur_param = team_params
-    #params_history = {t: [team_params[t], ] for t in range(nb_teams+1)[1:]}
-    params_history = {t: list() for t in range(nb_teams + 1)[1:]}  # excludes first params
-    for s in range(nb_diffused_seasons):
-        for step in range(nb_steps_interseason):  # teams change at interseason --> more volatility ?!
-            cur_param = update_teams_params(cur_param)
-        for i in range((nb_teams-1) * 2):
-            new_param = update_teams_params(cur_param)
-            for t in range(nb_teams+1)[1:]:
-                params_history[t].append(new_param[t])
-            cur_param = new_param
-
-    display_param_history(params_history, nb_diffused_seasons)
-
-
-def test_export_stationary_poisson_match_results(path=DATA_PATH):
-    """" exports stationary poisson match results and probabilities """
-    nb_teams = 18
-    nb_seasons = 10
-    df_results, df_probas, actual_team_params = create_stationary_poisson_match_results(nb_teams, nb_seasons, seed=0)
-    print(df_results.tail(20))
-    print(df_probas.tail(20))
-    df_results.to_csv(path + "stationary_poisson_results.csv", index=False)
-    df_probas.to_csv(path + "stationary_poisson_results_probabilities.csv", index=False)
-
-
-def test_export_dynamic_poisson_match_results(path=DATA_PATH):
-    """" exports dynamic poisson match results and probabilities """
-    nb_teams = 18
-    nb_seasons = 10
-    df_results, df_probas, params_history = create_dynamic_poisson_match_results(nb_teams, nb_seasons,
-                                                                                 nb_fixed_seasons=1, seed=0)
-    print(df_results.tail(20))
-    print(df_probas.tail(20))
-    df_results.to_csv(path + "dynamic_poisson_results.csv", index=False)
-    df_probas.to_csv(path + "dynamic_poisson_results_probabilities.csv", index=False)
-
-    display_param_history(params_history, nb_seasons)
-
-
-def test_create_bookmaker_quotes():
-    match_probas = pd.DataFrame({'W': [0.4, 0.6, 0.1, 1./3], 'D': [0.2, 0.2, 0.5, 1./3], 'L': [0.4, 0.2, 0.4, 1./3]})
-    quotes = create_noisy_bookmaker_quotes(match_probas, seed=0)
-    print(quotes)
-    print(quotes.apply(lambda x: np.reciprocal(x)).sum(axis=1))
+#
+#
+# def test_export_stationary_poisson_match_results(path=DATA_PATH):
+#     """" exports stationary poisson match results and probabilities """
+#     nb_teams = 18
+#     nb_seasons = 10
+#     df_results, df_probas, actual_team_params = create_stationary_poisson_match_results(nb_teams, nb_seasons, seed=0)
+#     print(df_results.tail(20))
+#     print(df_probas.tail(20))
+#     df_results.to_csv(path + "stationary_poisson_results.csv", index=False)
+#     df_probas.to_csv(path + "stationary_poisson_results_probabilities.csv", index=False)
+#
+#
+# def test_export_dynamic_poisson_match_results(path=DATA_PATH):
+#     """" exports dynamic poisson match results and probabilities """
+#     nb_teams = 18
+#     nb_seasons = 10
+#     df_results, df_probas, params_history = create_dynamic_poisson_match_results(nb_teams, nb_seasons,
+#                                                                                  nb_fixed_seasons=1, seed=0)
+#     print(df_results.tail(20))
+#     print(df_probas.tail(20))
+#     df_results.to_csv(path + "dynamic_poisson_results.csv", index=False)
+#     df_probas.to_csv(path + "dynamic_poisson_results_probabilities.csv", index=False)
+#
+#     display_param_history(params_history, nb_seasons)
 
 
 def create_stationary_poisson_match_results(nb_teams, nb_seasons, param_min=0.7, param_max=2.75, seed=None,
@@ -157,8 +129,6 @@ def display_param_history(params_history, nb_diffused_seasons=None):
         for s in range(nb_diffused_seasons)[1:]:
             plt.axvline(x=s * (nb_teams-1) * 2)
     #legend = ax.legend(loc='upper left', shadow=True)
-
-    if DISPLAY_GRAPH: plt.show()
 
 
 def update_teams_params(teams_params, a=0.02, b=0.01, min_param=0.6, max_param=3., target_sum=1.7, seed=None):
