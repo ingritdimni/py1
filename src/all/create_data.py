@@ -17,7 +17,7 @@ def test_param_dynamic():
     team_params = create_teams(nb_teams)
     cur_param = team_params
     #params_history = {t: [team_params[t], ] for t in range(nb_teams+1)[1:]}
-    params_history = {t: list() for t in range(nb_teams + 1)[1:]} # excludes first params
+    params_history = {t: list() for t in range(nb_teams + 1)[1:]}  # excludes first params
     for s in range(nb_diffused_seasons):
         for step in range(nb_steps_interseason):  # teams change at interseason --> more volatility ?!
             cur_param = update_teams_params(cur_param)
@@ -30,7 +30,7 @@ def test_param_dynamic():
     display_param_history(params_history, nb_diffused_seasons)
 
 
-def export_stationary_poisson_match_results(path=DATA_PATH):
+def test_export_stationary_poisson_match_results(path=DATA_PATH):
     """" exports stationary poisson match results and probabilities """
     nb_teams = 18
     nb_seasons = 10
@@ -41,7 +41,7 @@ def export_stationary_poisson_match_results(path=DATA_PATH):
     df_probas.to_csv(path + "stationary_poisson_results_probabilities.csv", index=False)
 
 
-def export_dynamic_poisson_match_results(path=DATA_PATH):
+def test_export_dynamic_poisson_match_results(path=DATA_PATH):
     """" exports dynamic poisson match results and probabilities """
     nb_teams = 18
     nb_seasons = 10
@@ -55,10 +55,18 @@ def export_dynamic_poisson_match_results(path=DATA_PATH):
     display_param_history(params_history, nb_seasons)
 
 
-def create_stationary_poisson_match_results(nb_teams, nb_seasons, param_min=0.7, param_max=2.75, seed=None):
+def test_create_bookmaker_quotes():
+    match_probas = pd.DataFrame({'W': [0.4, 0.6, 0.1, 1./3], 'D': [0.2, 0.2, 0.5, 1./3], 'L': [0.4, 0.2, 0.4, 1./3]})
+    quotes = create_noisy_bookmaker_quotes(match_probas, seed=0)
+    print(quotes)
+    print(quotes.apply(lambda x: np.reciprocal(x)).sum(axis=1))
+
+
+def create_stationary_poisson_match_results(nb_teams, nb_seasons, param_min=0.7, param_max=2.75, seed=None,
+                                            export=False, export_path=DATA_PATH):
     """ Creates nb_teams teams with different poisson params representing their ability to score.
     Then simulates nb_seasons seasons, knowing that in each season each team plays against each other twice"""
-    if seed: np.random.seed(seed)
+    if seed is not None: np.random.seed(seed)
     teams_params = create_teams(nb_teams, param_min, param_max)
 
     seasons_calendars = dict()
@@ -82,17 +90,21 @@ def create_stationary_poisson_match_results(nb_teams, nb_seasons, param_min=0.7,
                 win, draw, loss = perfect_prediction(home_i, away_i, teams_params)
                 df_probas = df_probas.append({'W': win, 'D': draw, 'L': loss}, ignore_index=True)
     assert(df_probas.shape[0] == df_results.shape[0])
+    if export:
+        param_str = 't' + str(nb_teams) + '_s' + str(nb_seasons) + '_'
+        df_results.to_csv(export_path + param_str + "stationary_poisson_results.csv", index=False)
+        df_probas.to_csv(export_path + param_str + "stationary_poisson_results_probabilities.csv", index=False)
     return df_results, df_probas, teams_params
 
 
 def create_dynamic_poisson_match_results(nb_teams, nb_seasons, param_min=0.6, param_max=3., nb_jumps_start_season=10,
-                                         nb_fixed_seasons=0, update_param_a=0.02, update_param_b = 0.01,
-                                         update_avg_param=1.7, seed=None):
+                                         nb_fixed_seasons=0, update_param_a=0.02, update_param_b=0.01,
+                                         update_avg_param=1.7, seed=None, export=False, export_path=DATA_PATH):
     """ Creates nb_teams teams with different poisson params representing their ability to score.
     Then simulates nb_seasons seasons, knowing that in each season each team plays against each other twice
     uses poisson param dynamic as described in update_teams_params """
     assert(nb_fixed_seasons <= nb_seasons)  # params do not move during nb_fixed seasons starting from the end
-    if seed: np.random.seed(seed)
+    if seed is not None: np.random.seed(seed)
     teams_params = create_teams(nb_teams, param_min, param_max)
 
     seasons_calendars = dict()
@@ -129,6 +141,10 @@ def create_dynamic_poisson_match_results(nb_teams, nb_seasons, param_min=0.6, pa
                     teams_params = update_teams_params(teams_params, update_param_a, update_param_b, param_min,
                                                        param_max, update_avg_param)  # update params
     assert(df_probas.shape[0] == df_results.shape[0])
+    if export:
+        param_str = 't' + str(nb_teams) + '_s' + str(nb_seasons) + '_'
+        df_results.to_csv(export_path + param_str + "dynamic_poisson_results.csv", index=False)
+        df_probas.to_csv(export_path + param_str + "dynamic_poisson_results_probabilities.csv", index=False)
     return df_results, df_probas, params_history
 
 
@@ -148,7 +164,7 @@ def display_param_history(params_history, nb_diffused_seasons=None):
 def update_teams_params(teams_params, a=0.02, b=0.01, min_param=0.6, max_param=3., target_sum=1.7, seed=None):
     """ creates a new set of params according to formula: new_param := noise * (a * old_param + b).
     teams_params input is a dictionary of params. returns a dictionary of updated params"""
-    if seed: np.random.seed(seed)
+    if seed is not None: np.random.seed(seed)
     noise = np.random.randn(len(teams_params))
     all_teams = list(teams_params.keys())
     nb_teams = len(all_teams)
@@ -167,6 +183,19 @@ def update_teams_params(teams_params, a=0.02, b=0.01, min_param=0.6, max_param=3
         new_params[all_teams[i]] = max(min(new_params[all_teams[i]] * ratio, max_param), min_param)
 
     return new_params
+
+
+def create_noisy_bookmaker_quotes(match_probas, std_dev=0.05, fees=0.05, seed=None):
+    """ create bookmaker quotes from actual probas.
+    add gaussian noise around actual proba, then convert it to bookmaker quotes adding some fees
+    TODO: improve, as fees might be different than expected, if p = init_p + std_dev * noise is not between [0, 1]"""
+    if seed is not None: np.random.seed(seed)
+    noise = np.random.randn(*match_probas.shape)
+    noisy_probas = np.clip(match_probas + std_dev * noise, 10e-7, 1.)
+    row_sums = noisy_probas.sum(axis=1).to_frame()  # output is a Series, need to cast it to broadcast in next line
+    noisy_probas_with_fees = np.clip(np.divide(np.multiply(noisy_probas, 1. + fees), row_sums), 10e-7, 1.)
+    noisy_probas_with_fees = noisy_probas_with_fees[['W', 'D', 'L']]  # to get columns in order
+    return np.reciprocal(noisy_probas_with_fees)
 
 
 def perfect_prediction(team_home, team_away, teams_param):
@@ -243,8 +272,7 @@ def create_calendar(nb_teams, base_calendar=None, seed=None):
         base_calendar = create_base_calendar(nb_teams)
 
     # on teh below, we shuffle results
-    if seed:
-        np.random.seed(seed)
+    if seed is not None: np.random.seed(seed)
     init_keys = list(base_calendar.keys())
     modified_keys = list(init_keys)
     np.random.shuffle(modified_keys)
@@ -261,6 +289,7 @@ def create_calendar(nb_teams, base_calendar=None, seed=None):
 
 
 if __name__ == "__main__":
+    test_create_bookmaker_quotes()
     #test_param_dynamic()
-    export_dynamic_poisson_match_results()
+    #test_export_dynamic_poisson_match_results()
     #export_stationary_poisson_match_results()

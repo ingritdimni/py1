@@ -176,19 +176,30 @@ def test_dynamic_model_on_data():
 
 
 def test_fable_on_data():
-    nb_teams = 18
-    nb_seasons = 10
+    nb_teams = 20
+    nb_seasons = 20
+
+    convolution_model = False
 
     #dynamic_tag = "stationary"
     dynamic_tag = "dynamic"
+    params_str = 't' + str(nb_teams) + '_s' + str(nb_seasons) + '_'
 
     np.random.seed(0)
-    match_results = pd.read_csv(DATA_PATH + dynamic_tag + "_poisson_results.csv")
-    actual_probas = pd.read_csv(DATA_PATH + dynamic_tag + "_poisson_results_probabilities.csv")
-    # match_results, actual_probas, team_params = create_stationary_poisson_match_results(nb_teams, nb_seasons)
+    try:
+        match_results = pd.read_csv(DATA_PATH + params_str + dynamic_tag + "_poisson_results.csv")
+        actual_probas = pd.read_csv(DATA_PATH + params_str + dynamic_tag + "_poisson_results_probabilities.csv")
+    except FileNotFoundError:
+        if dynamic_tag == "dynamic":
+            match_results, actual_probas, team_params = create_dynamic_poisson_match_results(nb_teams, nb_seasons,
+                                                                                             nb_fixed_seasons=2,
+                                                                                             export=True)
+        elif dynamic_tag == "stationary":
+            match_results, actual_probas, team_params = create_stationary_poisson_match_results(nb_teams, nb_seasons,
+                                                                                                export=True)
 
     match_results['date'] = create_time_feature_from_season_and_stage(match_results, base=100)
-    match_fables = simple_fable(match_results, nb_observed_match=34)
+    match_fables = simple_fable(match_results, nb_observed_match=(nb_teams-1)*2)
     match_labels = match_issues_hot_vectors(match_results)
 
     # Split the train and the validation set for the fitting
@@ -199,9 +210,6 @@ def test_fable_on_data():
     # eliminate first season (no fable)
     _, X_train, (_, remaining_train_indices) = split_input(X_train, split_ratio=1./9., random=False,
                                                            return_indices=True)
-
-    # X_train = X_train.reshape(list(X_train.shape) + [1, ])
-    # X_val = X_val.reshape(list(X_val.shape) + [1, ])
 
     Y_train = match_labels.iloc[indices90].iloc[remaining_train_indices]
     Y_val = match_labels.iloc[indices10]
@@ -216,7 +224,10 @@ def test_fable_on_data():
 
     # define and configure model
     #model = prepare_simple_nn_model(X_train.shape[1])
-    model = prepare_simple_nn_model_2d(X_train.shape[1:])
+    if convolution_model:
+        model = prepare_simple_nn_model_conv(X_train.shape[1:])
+    else:
+        model = prepare_simple_nn_model_2d(X_train.shape[1:])
 
     # Its better to have a decreasing learning rate during the training to reach efficiently the global
     # minimum of the loss function.
@@ -235,7 +246,7 @@ def test_fable_on_data():
 
     if VERBOSE: model.summary()
 
-    epochs = 250
+    epochs = 500
     batch_size = 256
     history = model.fit(x=X_train, y=Y_train, epochs=epochs, batch_size=batch_size, validation_data=(X_val, Y_val),
                         verbose=2, callbacks=[learning_rate_reduction])
@@ -334,7 +345,7 @@ def prepare_simple_nn_model(n_features, n_activations=512, activation_fct="sigmo
     return model
 
 
-def prepare_simple_nn_model_2d(input_shape, n_activations=128, activation_fct="sigmoid", base_dropout=0.45,
+def prepare_simple_nn_model_2d(input_shape, n_activations=128, activation_fct="sigmoid", base_dropout=0.4,
                                l2_regularization_factor=0.002):
 
     model = Sequential()
@@ -364,46 +375,45 @@ def prepare_simple_nn_model_2d(input_shape, n_activations=128, activation_fct="s
 
     model.add(Dense(n_activations, activation=activation_fct,
                     kernel_regularizer=regularizers.l2(l2_regularization_factor)))
+    model.add(Dropout(base_dropout))
+    model.add(Dense(3, activation="softmax"))
+    return model
+
+
+def prepare_simple_nn_model_conv(input_shape, n_activations=64, activation_fct="sigmoid", base_dropout=0.45,
+                               l2_regularization_factor=0.003):
+
+    model = Sequential()
+
+    model.add(Conv2D(2, kernel_size=[1, input_shape[-2]], input_shape=input_shape))
+    model.add(Flatten())
+    model.add(Dropout(base_dropout))
+
+    # model.add(Flatten(input_shape=input_shape))
+    # model.add(Dense(n_activations, activation=activation_fct,
+    #                 kernel_regularizer=regularizers.l2(l2_regularization_factor)))
+    # model.add(Dropout(base_dropout))
+
+    # model.add(Dense(n_activations, activation=activation_fct,
+    #                 kernel_regularizer=regularizers.l2(l2_regularization_factor)))
+    # model.add(Dropout(base_dropout))
+
+    # model.add(Dense(n_activations, activation=activation_fct,
+    #                 kernel_regularizer=regularizers.l2(l2_regularization_factor)))
+    # model.add(Dropout(base_dropout))
+
+    # model.add(Dense(n_activations, activation=activation_fct,
+    #                 kernel_regularizer=regularizers.l2(l2_regularization_factor)))
+    # model.add(Dropout(base_dropout))
+
+    model.add(Dense(n_activations, activation=activation_fct,
+                    kernel_regularizer=regularizers.l2(l2_regularization_factor)))
     model.add(Dropout(base_dropout*1.3))
     model.add(Dense(3, activation="softmax"))
     return model
 
 
-# def prepare_simple_nn_model_2d(input_shape, n_activations=256, activation_fct="sigmoid", base_dropout=0.45,
-#                                l2_regularization_factor=0.002):
-#
-#     model = Sequential()
-#     print(input_shape)
-#
-#     model.add(Conv2D(4, kernel_size=[1, input_shape[-2]], input_shape=input_shape))
-#     model.add(Flatten())
-#     model.add(Dropout(base_dropout))
-#
-#     # model.add(Flatten(input_shape=input_shape))
-#     # model.add(Dense(n_activations, activation=activation_fct,
-#     #                 kernel_regularizer=regularizers.l2(l2_regularization_factor)))
-#     # model.add(Dropout(base_dropout))
-#
-#     # model.add(Dense(n_activations, activation=activation_fct,
-#     #                 kernel_regularizer=regularizers.l2(l2_regularization_factor)))
-#     # model.add(Dropout(base_dropout))
-#
-#     # model.add(Dense(n_activations, activation=activation_fct,
-#     #                 kernel_regularizer=regularizers.l2(l2_regularization_factor)))
-#     # model.add(Dropout(base_dropout))
-#
-#     # model.add(Dense(n_activations, activation=activation_fct,
-#     #                 kernel_regularizer=regularizers.l2(l2_regularization_factor)))
-#     # model.add(Dropout(base_dropout))
-#
-#     model.add(Dense(n_activations, activation=activation_fct,
-#                     kernel_regularizer=regularizers.l2(l2_regularization_factor)))
-#     model.add(Dropout(base_dropout*1.3))
-#     model.add(Dense(3, activation="softmax"))
-#     return model
-
-
-def prepare_weights_and_nn_model(n_features, n_weights, n_activations=512, activation_fct = "sigmoid",
+def prepare_weights_and_nn_model(n_features, n_weights, n_activations=512, activation_fct="sigmoid",
                                  base_dropout=0.25, l2_regularization_factor=0.00005):
 
     input_layer = Input(shape=(n_features,))

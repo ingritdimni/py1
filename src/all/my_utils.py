@@ -15,13 +15,13 @@ def test_create_full_fable():
     print(match_results.tail(10))
     nb_observed_match = 30
     match_fables = match_results.apply(
-        lambda x: create_simple_fable(x, match_results, nb_observed_match=nb_observed_match, t_column_name='date',
-                                      home_team_key='home_team_id', away_team_key='away_team_id',
-                                      home_goals_key='home_team_goal', away_goals_key='away_team_goal'), axis=1)
+        lambda x: _create_simple_fable(x, match_results, nb_observed_match=nb_observed_match, t_column_name='date',
+                                       home_team_key='home_team_id', away_team_key='away_team_id',
+                                       home_goals_key='home_team_goal', away_goals_key='away_team_goal'), axis=1)
 
     print(match_fables.tail(10))
 
-    vect_fables = vectorize_simple_fable(match_fables, nb_observed_match=nb_observed_match, padding=True)
+    vect_fables = _vectorize_simple_fable(match_fables, nb_observed_match=nb_observed_match, padding=True)
     print(vect_fables[-10:])
 
 
@@ -51,20 +51,20 @@ def test_debug_fable():
     print(past_matches_descr)
 
     print("\n### validate create_simple_fable (on given match)###")
-    match_fable = create_simple_fable(match_results.iloc[2], match_results, nb_observed_match=10, t_column_name='date',
-                                      home_team_key='home_team_id', away_team_key='away_team_id',
-                                      home_goals_key='home_team_goal', away_goals_key='away_team_goal')
+    match_fable = _create_simple_fable(match_results.iloc[2], match_results, nb_observed_match=10, t_column_name='date',
+                                       home_team_key='home_team_id', away_team_key='away_team_id',
+                                       home_goals_key='home_team_goal', away_goals_key='away_team_goal')
     print(match_fable)
 
     print("\n### validate create_simple_fable (on several matches) ###")
     match_fables = match_results.apply(
-        lambda x: create_simple_fable(x, match_results, nb_observed_match=10, t_column_name='date',
-                                      home_team_key='home_team_id', away_team_key='away_team_id',
-                                      home_goals_key='home_team_goal', away_goals_key='away_team_goal'), axis=1)
+        lambda x: _create_simple_fable(x, match_results, nb_observed_match=10, t_column_name='date',
+                                       home_team_key='home_team_id', away_team_key='away_team_id',
+                                       home_goals_key='home_team_goal', away_goals_key='away_team_goal'), axis=1)
     print(match_fables)
 
     print("\n### validate vectorize_simple_fable ###")
-    vect_fables = vectorize_simple_fable(match_fables, nb_observed_match=10, padding=True)
+    vect_fables = _vectorize_simple_fable(match_fables, nb_observed_match=10, padding=True)
     print(vect_fables[-10:])
 
     print("\n### validate simple_fable ###")
@@ -134,21 +134,27 @@ def get_match_label(match, home_goals_key='home_team_goal', away_goal_key='away_
         return "L"
 
 
-def simple_fable(match_results, nb_observed_match=20, padding=True, t_column_name='date', home_team_key='home_team_id',
-                 away_team_key='away_team_id', home_goals_key='home_team_goal', away_goals_key='away_team_goal'):
+def simple_fable(match_results, nb_observed_match=20, padding=True, horizontal_features=False,
+                 t_column_name='date', home_team_key='home_team_id', away_team_key='away_team_id',
+                 home_goals_key='home_team_goal', away_goals_key='away_team_goal'):
     """ create simple fable and vectorize it """
     match_fables = match_results.apply(
-        lambda x: create_simple_fable(x, match_results, nb_observed_match=nb_observed_match,
-                                      t_column_name=t_column_name, home_team_key=home_team_key,
-                                      away_team_key=away_team_key, home_goals_key=home_goals_key,
-                                      away_goals_key=away_goals_key), axis=1)
-    #return vectorize_simple_fable_horizontal(match_fables, nb_observed_match=nb_observed_match, padding=padding)
-    return vectorize_simple_fable(match_fables, nb_observed_match=nb_observed_match, padding=padding)
+        lambda x: _create_simple_fable(x, match_results, nb_observed_match=nb_observed_match,
+                                       t_column_name=t_column_name, home_team_key=home_team_key,
+                                       away_team_key=away_team_key, home_goals_key=home_goals_key,
+                                       away_goals_key=away_goals_key), axis=1)
+    # either creates horizontal features only, or an array of features (allow convolution)
+    if horizontal_features:
+        return _vectorize_simple_fable_horizontal(match_fables, nb_observed_match=nb_observed_match, padding=padding)
+    else:
+        fables = _vectorize_simple_fable(match_fables, nb_observed_match=nb_observed_match, padding=padding)
+        fables = fables.reshape(list(fables.shape) + [1, ])
+        return fables
 
 
-def create_simple_fable(match, match_results, nb_observed_match=10, t_column_name='date',
-                        home_team_key='home_team_id', away_team_key='away_team_id', home_goals_key='home_team_goal',
-                        away_goals_key='away_team_goal'):
+def _create_simple_fable(match, match_results, nb_observed_match=10, t_column_name='date',
+                         home_team_key='home_team_id', away_team_key='away_team_id', home_goals_key='home_team_goal',
+                         away_goals_key='away_team_goal'):
     """ returns chosen characteristics (=fable) for a given match.
      More precisely, call create_simple_relative_match_description which created a match description (dict) for each
      past match of the 2 involved teams.
@@ -176,7 +182,7 @@ def create_simple_fable(match, match_results, nb_observed_match=10, t_column_nam
     return [list(home_matches_descr), list(away_matches_descr)]
 
 
-def vectorize_simple_fable(match_fables, nb_observed_match=10, descr_size=2, padding=False):
+def _vectorize_simple_fable(match_fables, nb_observed_match=10, descr_size=2, padding=False):
     """ vectorization of simple fable (returns numpy array)"""
     padding_value = 1 if padding else np.nan
     vectorized_fables = np.full((match_fables.shape[0], nb_observed_match * 2, descr_size), padding_value)
@@ -195,7 +201,7 @@ def vectorize_simple_fable(match_fables, nb_observed_match=10, descr_size=2, pad
     return vectorized_fables
 
 
-def vectorize_simple_fable_horizontal(match_fables, nb_observed_match=10, descr_size=2, padding=False):
+def _vectorize_simple_fable_horizontal(match_fables, nb_observed_match=10, descr_size=2, padding=False):
     """ vectorization of simple fable (returns numpy array)"""
     padding_value = 1 if padding else np.nan
     vectorized_fables = np.full((match_fables.shape[0], nb_observed_match * 2 * descr_size + 4), padding_value)
