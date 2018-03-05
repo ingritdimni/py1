@@ -56,8 +56,48 @@ class GenericInvestStrategy(object):
 
             outcome_i, investment, expected_return = self.match_investment(p, q)
             df_investments = df_investments.append({'investment_index': outcome_i, 'investment': investment,
-                                                    'expected_return': expected_return}, ignore_index=True)
+                                                    'expected_return': expected_return, 'quote': q[outcome_i]},
+                                                   ignore_index=True)
 
+        return df_investments
+
+    @staticmethod
+    def bet_gain(actual_result, investment):
+        # try:
+        #     l = actual_result['W'], actual_result['D'], actual_result['L']
+        #     index_win = l.index(max(l))
+        # except KeyError:
+        #     try:
+        #         assert(len(actual_result) == 3)
+        #         index_win = actual_result.index(max(actual_result))
+        #     except TypeError:
+        #         try:
+        #             assert(actual_result in [0, 1, 2])
+        #             index_win = actual_result
+        #         except AssertionError:
+        #             outcomes_labels = ['W', 'D', 'L']
+        #             if actual_result in outcomes_labels:
+        #                 index_win = outcomes_labels.index(actual_result)
+        #             else:
+        #                 raise TypeError("check_result: Cannot understand format of 'actual_result'. Please use hot vectors")
+        l = actual_result['W'], actual_result['D'], actual_result['L']
+        index_win = l.index(max(l))
+        if investment['investment_index'] == index_win:  # bet is won \o/
+            return True, investment['investment'] * (investment['quote'] - 1.)
+        else:
+            return False, -investment['investment']
+
+    # TODO: improve performances, it s really poor in this function !
+    @staticmethod
+    def bet_gains(actual_results, df_investments):
+        n_results = actual_results.shape[0]
+        assert(df_investments.shape[0] == n_results)
+        df_investments['is_won'] = np.nan
+        df_investments['gain'] = np.nan
+        for i in range(n_results):
+            is_won, gain = GenericInvestStrategy.bet_gain(actual_results.iloc[i], df_investments.iloc[i])
+            df_investments['is_won'].iloc[i] = is_won
+            df_investments['gain'].iloc[i] = gain
         return df_investments
 
 
@@ -77,7 +117,7 @@ class ConstantInvestStrategy(GenericInvestStrategy):
         p, b = list(match_probas), list(match_quote)
         outcome_i, expected_return = self.choose_outcome_fct(p, b)
         if outcome_i is None:
-            return 0., 0., 0.  # we invest 0 on win !
+            return 0, 0., 0.  # we invest 0 on win !
         return outcome_i, self.constant_investment, self.constant_investment * expected_return
 
 
@@ -97,7 +137,7 @@ class ConstantStdDevInvestStrategy(GenericInvestStrategy):
         p, b = list(match_probas), list(match_quote)
         outcome_i, expected_return = self.choose_outcome_fct(p, b)
         if outcome_i is None:
-            return 0., 0., 0.  # we invest 0 on win !
+            return 0, 0., 0.  # we invest 0 on win !
         invest_sigma = b[outcome_i] * np.sqrt(p[outcome_i] * (1. - p[outcome_i]))
         return outcome_i, self._sigma / invest_sigma, self._sigma / invest_sigma * expected_return
 
@@ -117,10 +157,10 @@ class KellyInvestStrategy(GenericInvestStrategy):
         p, b = list(match_probas), list(match_quote)
         outcome_i, expected_return = self.choose_outcome_fct(p, b)
         if outcome_i is None:
-            return 0., 0., 0.  # we invest 0 on win !
+            return 0, 0., 0.  # we invest 0 on win !
         investment = p[outcome_i] - (1. - p[outcome_i]) / (b[outcome_i] - 1.)
         return outcome_i, investment, investment * expected_return
 
 
 if __name__ == "__main__":
-    test_invest_strategies()
+    pass

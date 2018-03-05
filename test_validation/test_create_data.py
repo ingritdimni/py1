@@ -10,6 +10,7 @@ DISPLAY_GRAPH = False
 actual_export = False
 EPSILON = 10e-7
 
+
 def test_param_dynamic():
     np.random.seed(0)
     nb_diffused_seasons = 3

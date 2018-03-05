@@ -155,7 +155,7 @@ def update_teams_params(teams_params, a=0.02, b=0.01, min_param=0.6, max_param=3
     return new_params
 
 
-def create_noisy_bookmaker_quotes(match_probas, std_dev=0.05, fees=0.05, seed=None):
+def create_noisy_bookmaker_quotes(match_probas, std_dev=0.03, fees=0.05, seed=None):
     """ create bookmaker quotes from actual probas.
     add gaussian noise around actual proba, then convert it to bookmaker quotes adding some fees
     TODO: improve, as fees might be different than expected, if p = init_p + std_dev * noise is not between [0, 1]"""
