@@ -247,12 +247,13 @@ def create_simple_relative_match_description(match, reference_team, home_team_ke
     return {'scored': match[away_goals_key], 'conceded': match[home_goals_key]}
 
 
-def create_time_feature_from_season_and_stage(match_results, base=100):
+def create_time_feature_from_season_and_stage(match_results, base=100, season_key='season', stage_key='stage'):
     """ create a fake date feature from season and stage. It will actually be an int, but order will be correct"""
     def create_date_from_season_and_stage(season, stage, base):
         assert(stage < base)
         return season * base + stage
-    match_time = match_results.apply(lambda x: create_date_from_season_and_stage(x['season'], x['stage'], base), axis=1)
+    match_time = match_results.apply(lambda x: create_date_from_season_and_stage(x[season_key], x[stage_key], base),
+                                     axis=1)
     return match_time
 
 

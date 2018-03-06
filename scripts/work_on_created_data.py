@@ -11,7 +11,8 @@ from my_utils import split_input, split_inputs, get_match_label, trivial_feature
 from sklearn.metrics import accuracy_score, log_loss
 from nn_model import display_shapes, prepare_simple_nn_model, prepare_simple_nn_model_conv, \
     display_model_results_analysis
-from invest_strategies import ConstantInvestStrategy, KellyInvestStrategy, ConstantStdDevInvestStrategy
+from invest_strategies import ConstantAmountInvestStrategy, KellyInvestStrategy, ConstantStdDevInvestStrategy, \
+    ConstantPercentInvestStrategy
 
 import warnings
 warnings.simplefilter("ignore")
@@ -52,8 +53,9 @@ def end_to_end_test():
     bkm_quotes = create_noisy_bookmaker_quotes(actual_probas, std_dev=0.03, fees=0.05)
 
     match_results['date'] = create_time_feature_from_season_and_stage(match_results, base=100)
+
     print(" ... creating fables ...")
-    match_fables = simple_fable(match_results, nb_observed_match=(nb_teams-1)*2)
+    match_fables = simple_fable(match_results, nb_observed_match=(nb_teams-1)*1)
     match_labels = match_issues_hot_vectors(match_results)
 
     # Split the train and the validation set for the fitting
@@ -112,7 +114,7 @@ def end_to_end_test():
     # optimizer = RMSprop(lr=0.001, rho=0.9, epsilon=1e-08, decay=0.0)
     optimizer = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0)
 
-    epochs = 500
+    epochs = 250
     batch_size = 256
     try:
         model = load_model(MODEL_PATH + model_label)
@@ -145,14 +147,19 @@ def end_to_end_test():
         display_model_results_analysis(X_val, Y_val, predictions_val, actual_probas_val,
                                        [Y_train, predictions_train, actual_probas_train], nb_max_matchs_displayed=25)
 
-    invest_strategy = ConstantInvestStrategy(1.)  # invest 1 in each match (if expected return > 1% actually)
-    df_investments = invest_strategy.matches_investments(predictions_val, bkm_quotes_val)
+    constant_invest_stgy = ConstantAmountInvestStrategy(1.)  # invest 1 in each match (if expected return > 1% actually)
+    constant_sigma_invest_stgy = ConstantStdDevInvestStrategy(0.01)  # stdDev of each bet is 1% of wealth
+    kelly_invest_stgy = KellyInvestStrategy()  # Kelly's ratio investment to maximize's wealth long term return
+    constant_percent_stgy = ConstantPercentInvestStrategy(0.01)  # invest 1% of money each time
 
-    print(df_investments.tail(50))
+    for invest_stgy in [constant_invest_stgy, constant_sigma_invest_stgy, kelly_invest_stgy, constant_percent_stgy]:
+        print("\n#### results for ", invest_stgy.__class__.__name__, "####")
+        init_wealth = 100
+        df_recap_stgy = invest_stgy.apply_invest_strategy(predictions_val, bkm_quotes_val, Y_val,
+                                                          init_wealth=init_wealth)
 
-    df_gains = invest_strategy.bet_gains(Y_val, df_investments)
-
-    print(df_gains.tail(50))
+        print(df_recap_stgy[['invested_amounts', 'exp_gain_amounts', 'gain_amounts']].sum())
+        print('wealth: from', init_wealth, 'to', round(df_recap_stgy['wealth'].iloc[-1], 4))
 
 if __name__ == "__main__":
     end_to_end_test()

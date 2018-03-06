@@ -1,16 +1,16 @@
 import numpy as np
 import pandas as pd
 from football_betting.create_data import create_noisy_bookmaker_quotes
-from football_betting.invest_strategies import ConstantInvestStrategy, ConstantStdDevInvestStrategy, KellyInvestStrategy
+from football_betting.invest_strategies import ConstantAmountInvestStrategy, ConstantStdDevInvestStrategy, KellyInvestStrategy
 
 
 def test_invest_strategies():
     matches_probas = pd.DataFrame({'W': [0.4, 0.6, 0.1, 1./3], 'D': [0.2, 0.2, 0.5, 1./3], 'L': [0.4, 0.2, 0.4, 1./3]})
     matches_probas = matches_probas[['W', 'D', 'L']]  # order columns -> very important !
     matches_results = pd.DataFrame({'W': [0, 1, 0, 1], 'D': [0, 0, 1, 0], 'L': [1, 0, 0, 0]})
-    matches_results = matches_probas[['W', 'D', 'L']]  # order columns -> very important !
+    matches_results = matches_results[['W', 'D', 'L']]  # order columns -> very important !
     cst_sigma_invest_strategy = ConstantStdDevInvestStrategy(0.04)
-    cst_invest_strategy = ConstantInvestStrategy(1.)
+    cst_invest_strategy = ConstantAmountInvestStrategy(1.)
     kelly_invest_strategy = KellyInvestStrategy()
     seed = 2
 
@@ -23,8 +23,15 @@ def test_invest_strategies():
 
         matches_quotes2 = create_noisy_bookmaker_quotes(matches_probas, std_dev=0.02, fees=0.05, seed=seed)
         invest = invest_strategy.matches_investments(matches_probas, matches_quotes2)
-        print(invest)
+        # print(invest)
         assert(np.linalg.norm(invest) > 0)
-        res = invest_strategy.bet_gains(matches_results, invest)
-        print(res)
+        res = invest_strategy.matches_gains(matches_results, invest)
+
+        df_recap = invest_strategy.apply_invest_strategy(matches_probas, matches_quotes2,
+                                                                                       matches_results)
+        print(100., '-->', df_recap['wealth'].iloc[-1])
+        print(df_recap)
+
+if __name__ == '__main__':
+    test_invest_strategies()
 
