@@ -9,7 +9,7 @@ from keras import regularizers
 import matplotlib.pyplot as plt
 from create_data import create_stationary_poisson_match_results, create_dynamic_poisson_match_results
 from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, simple_fable, \
-    match_issues_hot_vectors, create_time_feature_from_season_and_stage
+    match_issues_hot_vectors, create_time_feature_from_season_and_stage, display_shapes
 from weights import exp_weight, exp_weights, linear_gated_weights, one_weights, season_count_fraction
 from keras.losses import categorical_crossentropy
 from sklearn.metrics import accuracy_score, log_loss
@@ -271,8 +271,6 @@ def test_fable_on_data():
                                        [Y_train, predictions_train, actual_probas_train], nb_max_matchs_displayed=25)
 
 
-
-
 def w_categorical_crossentropy(target, output, weights):
     # scale preds so that the class probas of each sample sum to 1 --> should not be necessary for us
     output /= tf.reduce_sum(output, len(output.get_shape()) - 1, True)
@@ -303,12 +301,12 @@ def display_model_results_analysis(X_val, Y_val, predictions_val, actual_probas_
     if compare_to_dummy_pred:
         print("score of equiprobability prediction :", round(log_loss(Y_val, np.full(predictions_val.shape, 1./3)), 4))
 
-
-def display_shapes(X_train, X_val, Y_train, Y_val):
-    print("X_train shape:", X_train.shape)
-    print("X_val shape:", X_val.shape)
-    print("Y_train shape:", Y_train.shape)
-    print("Y_val shape:", Y_val.shape)
+#
+# def display_shapes(X_train, X_val, Y_train, Y_val):
+#     print("X_train shape:", X_train.shape)
+#     print("X_val shape:", X_val.shape)
+#     print("Y_train shape:", Y_train.shape)
+#     print("Y_val shape:", Y_val.shape)
 
 
 def teams_from_dummies(x_dummy, home_team_base_label="home_team_id", away_team_base_label="away_team_id"):

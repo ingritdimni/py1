@@ -3,35 +3,72 @@ import copy
 import pandas as pd
 import matplotlib.pyplot as plt
 from poisson import PoissonHelper
+from sklearn.metrics import accuracy_score, log_loss
 
+from my_utils import create_time_feature_from_season_and_stage, simple_fable, match_issues_hot_vectors, split_input, \
+    display_shapes
 
 DATA_PATH = "D:/Football_betting/artificial_data/"  # default export path, might be overwritten
 
-#
-#
-# def test_export_stationary_poisson_match_results(path=DATA_PATH):
-#     """" exports stationary poisson match results and probabilities """
-#     nb_teams = 18
-#     nb_seasons = 10
-#     df_results, df_probas, actual_team_params = create_stationary_poisson_match_results(nb_teams, nb_seasons, seed=0)
-#     print(df_results.tail(20))
-#     print(df_probas.tail(20))
-#     df_results.to_csv(path + "stationary_poisson_results.csv", index=False)
-#     df_probas.to_csv(path + "stationary_poisson_results_probabilities.csv", index=False)
-#
-#
-# def test_export_dynamic_poisson_match_results(path=DATA_PATH):
-#     """" exports dynamic poisson match results and probabilities """
-#     nb_teams = 18
-#     nb_seasons = 10
-#     df_results, df_probas, params_history = create_dynamic_poisson_match_results(nb_teams, nb_seasons,
-#                                                                                  nb_fixed_seasons=1, seed=0)
-#     print(df_results.tail(20))
-#     print(df_probas.tail(20))
-#     df_results.to_csv(path + "dynamic_poisson_results.csv", index=False)
-#     df_probas.to_csv(path + "dynamic_poisson_results_probabilities.csv", index=False)
-#
-#     display_param_history(params_history, nb_seasons)
+
+def full_data_creation(nb_teams, nb_seasons, dynamic_tag="dynamic", nb_seasons_val=2, fable_observed_seasons=1,
+                       bkm_noise=0.03, bkm_fees=0.05, nb_fixed_seasons=0, horizontal_fable_features=False, verbose=1,
+                       data_path=DATA_PATH):
+    assert(nb_seasons_val + fable_observed_seasons < nb_seasons)
+    # dynamic_tag = "stationary"
+    params_str = 't' + str(nb_teams) + '_s' + str(nb_seasons) + '_'
+
+    np.random.seed(0)
+    try:
+        match_results = pd.read_csv(data_path + params_str + dynamic_tag + "_poisson_results.csv")
+        actual_probas = pd.read_csv(data_path + params_str + dynamic_tag + "_poisson_results_probabilities.csv")
+        print(" ... data files have been loaded ...")
+    except FileNotFoundError:
+        print("no data files found: ... creating data ...")
+        if dynamic_tag == "dynamic":
+            match_results, actual_probas, team_params = create_dynamic_poisson_match_results(nb_teams, nb_seasons,
+                                                                                             nb_fixed_seasons=
+                                                                                             nb_fixed_seasons,
+                                                                                             export=True)
+        elif dynamic_tag == "stationary":
+            match_results, actual_probas, team_params = create_stationary_poisson_match_results(nb_teams, nb_seasons,
+                                                                                                export=True)
+
+    bkm_quotes = create_noisy_bookmaker_quotes(actual_probas, std_dev=bkm_noise, fees=bkm_fees)
+
+    match_results['date'] = create_time_feature_from_season_and_stage(match_results, base=100)
+
+    if verbose: print(" ... creating fables ...")
+    match_fables = simple_fable(match_results, nb_observed_match=(nb_teams - 1) * fable_observed_seasons * 2,
+                                horizontal_features=horizontal_fable_features)
+    match_labels = match_issues_hot_vectors(match_results)
+
+    # Split the train and the validation set for the fitting
+    split_ratio_1 = 1. - nb_seasons_val / nb_seasons
+    # X_train, X_val, Y_train, Y_val = train_test_split(x_data, y_data, test_size=0.1, random_state=random_seed)
+    X_train, X_val, (indices90, indices10) = split_input(match_fables, split_ratio=split_ratio_1,
+                                                         random=False, return_indices=True)
+
+    # eliminate first season (no fable)
+    split_ratio_2 = fable_observed_seasons / (nb_seasons - nb_seasons_val)
+    _, X_train, (_, remaining_train_indices) = split_input(X_train, split_ratio=split_ratio_2, random=False,
+                                                           return_indices=True)
+
+    Y_train = match_labels.iloc[indices90].iloc[remaining_train_indices]
+    Y_val = match_labels.iloc[indices10]
+    bkm_quotes_train = bkm_quotes.iloc[indices90].iloc[remaining_train_indices]
+    bkm_quotes_val = bkm_quotes.iloc[indices10]
+
+    if verbose: display_shapes(X_train, X_val, Y_train, Y_val)
+
+    # get actual probabilities of issues for the validation set of matches
+    actual_probas_train = actual_probas.iloc[indices90].iloc[remaining_train_indices]
+    actual_probas_val = actual_probas.iloc[indices10]
+    if verbose:
+        print("best possible honest score on train set:", log_loss(Y_train, actual_probas_train))
+        print("best possible honest score on validation set:", log_loss(Y_val, actual_probas_val))
+
+    return X_train, X_val, Y_train, Y_val, actual_probas_train, actual_probas_val, bkm_quotes_train, bkm_quotes_val
 
 
 def create_stationary_poisson_match_results(nb_teams, nb_seasons, param_min=0.7, param_max=2.75, seed=None,
@@ -114,7 +151,8 @@ def create_dynamic_poisson_match_results(nb_teams, nb_seasons, param_min=0.6, pa
                                                        param_max, update_avg_param)  # update params
     assert(df_probas.shape[0] == df_results.shape[0])
     if export:
-        param_str = 't' + str(nb_teams) + '_s' + str(nb_seasons) + '_'
+        nb_fixed_seasons_str = '_fixseas' + str(nb_fixed_seasons) if nb_fixed_seasons else ''
+        param_str = 't' + str(nb_teams) + '_s' + str(nb_seasons) + nb_fixed_seasons_str + '_' + ''
         df_results.to_csv(export_path + param_str + "dynamic_poisson_results.csv", index=False)
         df_probas.to_csv(export_path + param_str + "dynamic_poisson_results_probabilities.csv", index=False)
     return df_results, df_probas, params_history
@@ -259,7 +297,7 @@ def create_calendar(nb_teams, base_calendar=None, seed=None):
 
 
 if __name__ == "__main__":
-    test_create_bookmaker_quotes()
+    pass
     #test_param_dynamic()
     #test_export_dynamic_poisson_match_results()
     #export_stationary_poisson_match_results()

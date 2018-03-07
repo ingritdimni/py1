@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from create_data import create_stationary_poisson_match_results
 
 #
 # def test_create_full_fable():
@@ -120,6 +119,13 @@ def match_issues_hot_vectors(match_results):
     y_dummy = pd.get_dummies(y_data, prefix_sep='')
     y_dummy = y_dummy[['W', 'D', 'L']]  # change order to get win first
     return y_dummy
+
+
+def display_shapes(X_train, X_val, Y_train, Y_val):
+    print("X_train shape:", X_train.shape)
+    print("X_val shape:", X_val.shape)
+    print("Y_train shape:", Y_train.shape)
+    print("Y_val shape:", Y_val.shape)
 
 
 def get_match_label(match, home_goals_key='home_team_goal', away_goal_key='away_team_goal'):
