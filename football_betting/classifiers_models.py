@@ -13,25 +13,39 @@ from sklearn.metrics import classification_report, accuracy_score, log_loss
 from sklearn.decomposition import PCA, FastICA
 from sklearn.pipeline import Pipeline
 from time import time
+from sklearn.model_selection import train_test_split
 
 from create_data import full_data_creation
 from my_utils import split_input
 
 
 def test_train_classifier():
-    nb_teams = 10
-    nb_seasons = 10
+    nb_teams = 20
+    nb_seasons = 20
 
     # load everything
     data = full_data_creation(nb_teams, nb_seasons, dynamic_tag="dynamic", nb_seasons_val=2, fable_observed_seasons=1,
-                              bkm_noise=0.03, horizontal_fable_features=True)
+                              bkm_noise=0.03, label_format="indices", horizontal_fable_features=True)
     # split data
     X_train, X_val, Y_train, Y_val, actual_probas_train, actual_probas_val, bkm_quotes_train, bkm_quotes_val = data
 
-    X_train, X_calib, [indices_train, indices_calib] = split_input(X_train, split_ratio=0.9, random=True,
+    X_train, X_calib, [indices_train, indices_calib] = split_input(X_train, split_ratio=0.7, random=True,
                                                                    return_indices=True)
     Y_calib = Y_train.iloc[indices_calib]
     Y_train = Y_train.iloc[indices_train]
+
+    # print(Y_train.iloc[-10:])
+    # X_train, _, Y_train, _ = train_test_split(X_train, Y_train, test_size=0.1, shuffle=True, stratify=Y_train)
+    # print(Y_train[-10:])
+    # input()
+
+    LOG_clf = linear_model.LogisticRegression(multi_class="ovr", solver="sag", class_weight='balanced')
+    # LOG_clf.fit(X_train, Y_train)
+    # print("Score of {} for training set: {:.4f}.".format(LOG_clf.__class__.__name__,
+    #                                                      accuracy_score(Y_train, LOG_clf.predict(X_train))))
+    # print(
+    #     "Score of {} for test set: {:.4f}.".format(LOG_clf.__class__.__name__, accuracy_score(Y_val,
+    #                                                                                           LOG_clf.predict(X_val))))
 
     dm_reduction = PCA()
     RF_clf = RandomForestClassifier(n_estimators=200, random_state=1, class_weight='balanced')
@@ -43,13 +57,20 @@ def test_train_classifier():
     n_features = X_train.shape[1]
     parameters_RF = {'clf__max_features': ['auto', 'log2'],
                      'dm_reduce__n_components': np.arange(5, n_features, np.around(n_features / 5))}
+    parameters_LOG = {'clf__C': np.logspace(1, 1000, 5),
+                      'dm_reduce__n_components': np.arange(5, n_features, np.around(n_features / 5))}
 
     # scorer = make_scorer(accuracy_score)
     scorer = make_scorer(log_loss)
+    # scorer = make_scorer(lambda x, y: log_loss(x, y, labels=sorted(np.unique(y))))  # to improve
+    # scorer = lambda y: make_scorer(log_loss, greater_is_better=False, needs_proba=True,
+    #                                labels=sorted(np.unique(y)))
 
     # computations core to use
-    jobs = -1
+    jobs = 1
 
+    # best_pipe = train_classifier(LOG_clf, dm_reduction, X_train, Y_train, cv_sets, parameters_LOG, scorer, jobs,
+    #                              use_grid_search=True, best_components=None, best_params=None)
     best_pipe = train_classifier(RF_clf, dm_reduction, X_train, Y_train, cv_sets, parameters_RF, scorer, jobs,
                                  use_grid_search=True, best_components=None, best_params=None)
 

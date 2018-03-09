@@ -8,8 +8,9 @@ from keras.callbacks import ReduceLROnPlateau
 from keras import regularizers
 import matplotlib.pyplot as plt
 from create_data import create_stationary_poisson_match_results, create_dynamic_poisson_match_results
-from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, simple_fable, \
-    match_issues_hot_vectors, create_time_feature_from_season_and_stage, display_shapes
+from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, match_issues_hot_vectors, \
+    create_time_feature_from_season_and_stage, display_shapes
+from fables import simple_fable
 from weights import exp_weight, exp_weights, linear_gated_weights, one_weights, season_count_fraction
 from keras.losses import categorical_crossentropy
 from sklearn.metrics import accuracy_score, log_loss
@@ -380,12 +381,13 @@ def prepare_simple_nn_model(input_shape, n_activations=128, activation_fct="sigm
     return model
 
 
-def prepare_simple_nn_model_conv(input_shape, n_activations=64, activation_fct="sigmoid", base_dropout=0.45,
-                               l2_regularization_factor=0.003):
+def prepare_simple_nn_model_conv(input_shape, n_activations=64, n_conv_filter=4,
+                                 activation_fct="sigmoid", base_dropout=0.45,
+                                 l2_regularization_factor=0.003):
 
     model = Sequential()
 
-    model.add(Conv2D(2, kernel_size=[1, input_shape[-2]], input_shape=input_shape))
+    model.add(Conv2D(n_conv_filter, kernel_size=[1, input_shape[-2]], input_shape=input_shape))
     model.add(Flatten())
     model.add(Dropout(base_dropout))
 
@@ -408,7 +410,7 @@ def prepare_simple_nn_model_conv(input_shape, n_activations=64, activation_fct="
 
     model.add(Dense(n_activations, activation=activation_fct,
                     kernel_regularizer=regularizers.l2(l2_regularization_factor)))
-    model.add(Dropout(base_dropout*1.3))
+    model.add(Dropout(base_dropout))
     model.add(Dense(3, activation="softmax"))
     return model
 

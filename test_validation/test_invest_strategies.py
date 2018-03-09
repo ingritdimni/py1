@@ -15,7 +15,7 @@ def test_invest_strategies():
     seed = 2
 
     for invest_strategy in [cst_invest_strategy, cst_sigma_invest_strategy, kelly_invest_strategy]:
-        print("\n#### testing", invest_strategy.__class__.__name__, "####")
+        #print("\n#### testing", invest_strategy.__class__.__name__, "####")
         matches_quotes1 = create_noisy_bookmaker_quotes(matches_probas, std_dev=0.0, fees=0.05, seed=seed)
         invest = invest_strategy.matches_investments(matches_probas, matches_quotes1)
         # no investment opportunities ! Bookies are too good (perfect predictions)
@@ -27,10 +27,9 @@ def test_invest_strategies():
         assert(np.linalg.norm(invest) > 0)
         res = invest_strategy.matches_gains(matches_results, invest)
 
-        df_recap = invest_strategy.apply_invest_strategy(matches_probas, matches_quotes2,
-                                                                                       matches_results)
-        print(100., '-->', df_recap['wealth'].iloc[-1])
-        print(df_recap)
+        df_recap = invest_strategy.apply_invest_strategy(matches_probas, matches_quotes2, matches_results)
+        # print(100., '-->', df_recap['wealth'].iloc[-1])
+        # print(df_recap)
 
 if __name__ == '__main__':
     test_invest_strategies()

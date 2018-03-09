@@ -5,16 +5,22 @@ import matplotlib.pyplot as plt
 from poisson import PoissonHelper
 from sklearn.metrics import accuracy_score, log_loss
 
-from my_utils import create_time_feature_from_season_and_stage, simple_fable, match_issues_hot_vectors, split_input, \
-    display_shapes
+from my_utils import create_time_feature_from_season_and_stage, match_issues_hot_vectors, \
+    match_issues_indices, split_input, display_shapes, get_match_label
+from fables import simple_fable, simple_stats_fable
 
 DATA_PATH = "D:/Football_betting/artificial_data/"  # default export path, might be overwritten
 
 
 def full_data_creation(nb_teams, nb_seasons, dynamic_tag="dynamic", nb_seasons_val=2, fable_observed_seasons=1,
-                       bkm_noise=0.03, bkm_fees=0.05, nb_fixed_seasons=0, horizontal_fable_features=False, verbose=1,
-                       data_path=DATA_PATH):
+                       bkm_noise=0.03, bkm_fees=0.05, nb_fixed_seasons=0, fable='match_hist',
+                       label_format="hot_vectors", horizontal_fable_features=False, verbose=1, data_path=DATA_PATH):
+
+    # Check inputs
     assert(nb_seasons_val + fable_observed_seasons < nb_seasons)
+    assert(label_format in ("hot_vectors", "indices", "labels"))
+    assert(fable in ("match_hist", "stats"))
+
     # dynamic_tag = "stationary"
     params_str = 't' + str(nb_teams) + '_s' + str(nb_seasons) + '_'
 
@@ -39,9 +45,17 @@ def full_data_creation(nb_teams, nb_seasons, dynamic_tag="dynamic", nb_seasons_v
     match_results['date'] = create_time_feature_from_season_and_stage(match_results, base=100)
 
     if verbose: print(" ... creating fables ...")
-    match_fables = simple_fable(match_results, nb_observed_match=(nb_teams - 1) * fable_observed_seasons * 2,
-                                horizontal_features=horizontal_fable_features)
-    match_labels = match_issues_hot_vectors(match_results)
+    if fable == "match_hist":
+        match_fables = simple_fable(match_results, nb_observed_match=(nb_teams - 1) * fable_observed_seasons * 2,
+                                    horizontal_features=horizontal_fable_features)
+    elif fable == "stats":
+        match_fables = simple_stats_fable(match_results, nb_observed_match=(nb_teams - 1) * fable_observed_seasons * 2)
+    if label_format == "hot_vectors":
+        match_labels = match_issues_hot_vectors(match_results)
+    elif label_format == "indices":
+        match_labels = match_issues_indices(match_results)
+    elif label_format == "labels":
+        match_labels = match_results.apply(get_match_label, axis=1)
 
     # Split the train and the validation set for the fitting
     split_ratio_1 = 1. - nb_seasons_val / nb_seasons

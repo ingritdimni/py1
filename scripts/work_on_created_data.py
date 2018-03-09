@@ -5,10 +5,11 @@ from keras.callbacks import ReduceLROnPlateau
 from keras.models import load_model
 import matplotlib.pyplot as plt
 from create_data import create_stationary_poisson_match_results, create_dynamic_poisson_match_results, \
-    create_noisy_bookmaker_quotes
-from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, simple_fable, \
+    create_noisy_bookmaker_quotes, full_data_creation
+from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, \
     match_issues_hot_vectors, create_time_feature_from_season_and_stage
 from sklearn.metrics import accuracy_score, log_loss
+from fables import simple_fable, simple_stats_fable
 from nn_model import display_shapes, prepare_simple_nn_model, prepare_simple_nn_model_conv, \
     display_model_results_analysis
 from invest_strategies import ConstantAmountInvestStrategy, KellyInvestStrategy, ConstantStdDevInvestStrategy, \
@@ -28,79 +29,51 @@ EPSILON = 1e-7
 def end_to_end_test():
     nb_teams = 20
     nb_seasons = 20
-
-    convolution_model = False
-
-    #dynamic_tag = "stationary"
     dynamic_tag = "dynamic"
-    params_str = 't' + str(nb_teams) + '_s' + str(nb_seasons) + '_'
-
+    bkm_noise = 0.03
+    nb_observed_seasons = 1
     np.random.seed(0)
-    try:
-        match_results = pd.read_csv(DATA_PATH + params_str + dynamic_tag + "_poisson_results.csv")
-        actual_probas = pd.read_csv(DATA_PATH + params_str + dynamic_tag + "_poisson_results_probabilities.csv")
-        print(" ... data files have been loaded ...")
-    except FileNotFoundError:
-        print("no data files found: ... creating data ...")
-        if dynamic_tag == "dynamic":
-            match_results, actual_probas, team_params = create_dynamic_poisson_match_results(nb_teams, nb_seasons,
-                                                                                             nb_fixed_seasons=2,
-                                                                                             export=True)
-        elif dynamic_tag == "stationary":
-            match_results, actual_probas, team_params = create_stationary_poisson_match_results(nb_teams, nb_seasons,
-                                                                                                export=True)
 
-    bkm_quotes = create_noisy_bookmaker_quotes(actual_probas, std_dev=0.03, fees=0.05)
+    # load everything
+    data = full_data_creation(nb_teams, nb_seasons, dynamic_tag=dynamic_tag,
+                              fable_observed_seasons=nb_observed_seasons, bkm_noise=bkm_noise, fable='stats',
+                              horizontal_fable_features=False)
+    # split data
+    X_train, X_val, Y_train, Y_val, actual_probas_train, actual_probas_val, bkm_quotes_train, bkm_quotes_val = data
 
-    match_results['date'] = create_time_feature_from_season_and_stage(match_results, base=100)
-
-    print(" ... creating fables ...")
-    match_fables = simple_fable(match_results, nb_observed_match=(nb_teams-1)*1)
-    match_labels = match_issues_hot_vectors(match_results)
-
-    # Split the train and the validation set for the fitting
-    # X_train, X_val, Y_train, Y_val = train_test_split(x_data, y_data, test_size=0.1, random_state=random_seed)
-    X_train, X_val, (indices90, indices10) = split_input(match_fables, split_ratio=0.9,
-                                                         random=False, return_indices=True)
-
-    # eliminate first season (no fable)
-    _, X_train, (_, remaining_train_indices) = split_input(X_train, split_ratio=1./9., random=False,
-                                                           return_indices=True)
-
-    Y_train = match_labels.iloc[indices90].iloc[remaining_train_indices]
-    Y_val = match_labels.iloc[indices10]
-    bkm_quotes_val = bkm_quotes.iloc[indices10]
-
-    if VERBOSE: display_shapes(X_train, X_val, Y_train, Y_val)
-
-    # get actual probabilities of issues for the validation set of matches
-    actual_probas_train = actual_probas.iloc[indices90].iloc[remaining_train_indices]
-    actual_probas_val = actual_probas.iloc[indices10]
-    print("best possible honnest score on train set:", log_loss(Y_train, actual_probas_train))
-    print("best possible honnest score on validation set:", log_loss(Y_val, actual_probas_val))
-
+    epochs = 200
+    convolution_model = False
     # define and configure model
     if convolution_model:
         add_tag = "conv"
-        n_activations = 64
-        activation_fct = "sigmoid"
+        # n_activations = 64
+        n_activations = 16
+        n_conv_filter = 4
+        # activation_fct = "sigmoid"
+        activation_fct = "relu"
         dropout = 0.45
-        l2_reg = 0.003
-        model = prepare_simple_nn_model_conv(X_train.shape[1:], n_activations=n_activations, activation_fct=activation_fct,
-                                        base_dropout=dropout, l2_regularization_factor=l2_reg)
+        # l2_reg = 0.003
+        l2_reg = 0.07
+        model = prepare_simple_nn_model_conv(X_train.shape[1:], n_activations=n_activations, n_conv_filter=n_conv_filter,
+                                             activation_fct=activation_fct, base_dropout=dropout,
+                                             l2_regularization_factor=l2_reg)
     else:
         add_tag = "simple"
-        n_activations = 128
-        activation_fct = "sigmoid"
-        dropout = 0.4
-        l2_reg = 0.002
+        # n_activations = 128  # sigmoid
+        n_activations = 50  # relu
+        # activation_fct = "sigmoid"
+        activation_fct = "relu"
+        dropout = 0.45
+        # l2_reg = 0.002  # sigmoid
+        l2_reg = 0.01  # relu
         model = prepare_simple_nn_model(X_train.shape[1:], n_activations=n_activations, activation_fct=activation_fct,
                                         base_dropout=dropout, l2_regularization_factor=l2_reg)
 
     # creates a model label containing most of its param (used to load / save it)
-    model_label = add_tag + '_model_' + str(n_activations) + '_' + activation_fct + '_d' + str(dropout) + \
-                  '_reg' + str(l2_reg) + '_shape_' + ''.join(str(e) + '_' for e in X_train.shape[1:] if e > 1)
-    model_label = model_label[:-1].replace('.', '')
+    model_label = add_tag + '_model_' + str(n_activations) + '_' + activation_fct + '_d' + str(dropout) + '_reg' + \
+                  str(l2_reg) + '_shape_' + ''.join(str(e) + '_' for e in X_train.shape[1:] if e > 1) + 'e' + \
+                  str(epochs)
+    model_label = model_label.replace('.', '')
     model_label += '.h5py'
 
     # Its better to have a decreasing learning rate during the training to reach efficiently the global
@@ -114,7 +87,6 @@ def end_to_end_test():
     # optimizer = RMSprop(lr=0.001, rho=0.9, epsilon=1e-08, decay=0.0)
     optimizer = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0)
 
-    epochs = 250
     batch_size = 256
     try:
         model = load_model(MODEL_PATH + model_label)
