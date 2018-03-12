@@ -2,7 +2,13 @@ import numpy as np
 import pandas as pd
 from football_betting.create_data import create_stationary_poisson_match_results
 from football_betting.my_utils import create_time_feature_from_season_and_stage, get_last_matches, split_inputs, \
-    split_input
+    split_input, bkm_quote_to_probas
+
+
+def test_bkm_to_probas():
+    bkm_quotes = pd.DataFrame({'W': [3., 2.9, 2., 10.], 'D': [3., 2.9, 4., 9.], 'L': [3., 2.9, 4., 1.25]})
+    probas = bkm_quote_to_probas(bkm_quotes, outcomes_labels=None)
+    assert(probas[0, 0] == probas[0, 1] == probas[0, 2] == probas[1, 0] == probas[1, 1] == probas[1, 2])
 
 
 def test_split():
