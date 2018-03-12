@@ -4,21 +4,17 @@ from keras.optimizers import RMSprop, Adam
 from keras.callbacks import ReduceLROnPlateau
 from keras.models import load_model
 import matplotlib.pyplot as plt
-from create_data import create_stationary_poisson_match_results, create_dynamic_poisson_match_results, \
-    create_noisy_bookmaker_quotes, full_data_creation
 from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, \
-    match_issues_hot_vectors, create_time_feature_from_season_and_stage
+    match_issues_hot_vectors, create_time_feature_from_season_and_stage, contain_nan
 from sklearn.metrics import accuracy_score, log_loss
 from fables import simple_fable, simple_stats_fable
 from nn_model import display_shapes, prepare_simple_nn_model, prepare_simple_nn_model_conv, \
-    display_model_results_analysis
+    display_model_results_analysis, display_results_analysis
 from invest_strategies import ConstantAmountInvestStrategy, KellyInvestStrategy, ConstantStdDevInvestStrategy, \
     ConstantPercentInvestStrategy
+from data_preparation import simple_data_prep
 
-import warnings
-warnings.simplefilter("ignore")
 
-DATA_PATH = "D:/Football_betting/artificial_data/"
 MODEL_PATH = "D:/Football_betting/models/"
 VERBOSE = True
 DISPLAY_GRAPH = True
@@ -27,19 +23,21 @@ EPSILON = 1e-7
 
 
 def end_to_end_test():
-    nb_teams = 20
-    nb_seasons = 20
-    dynamic_tag = "dynamic"
-    bkm_noise = 0.03
-    nb_observed_seasons = 1
     np.random.seed(0)
 
-    # load everything
-    data = full_data_creation(nb_teams, nb_seasons, dynamic_tag=dynamic_tag,
-                              fable_observed_seasons=nb_observed_seasons, bkm_noise=bkm_noise, fable='match_hist',
-                              horizontal_fable_features=False)
+    # load data
+    match_data, match_features, match_labels, bkm_quotes = simple_data_prep(verbose=1, fable_observed_matches=40,
+                                                                            padding=False, fable="match_hist",
+                                                                            label_format="hot_vectors")
+
     # split data
-    X_train, X_val, Y_train, Y_val, actual_probas_train, actual_probas_val, bkm_quotes_train, bkm_quotes_val = data
+    split_ratio = 0.15
+    X_train, X_val, (indices_train, indices_val) = split_input(match_features, 1.-split_ratio, random=True,
+                                                               return_indices=True)
+    Y_train, Y_val = match_labels.iloc[indices_train], match_labels.iloc[indices_val]
+    bkm_quotes_train, bkm_quotes_val = bkm_quotes.iloc[indices_train], bkm_quotes.iloc[indices_val]
+
+    display_shapes(X_train, X_val, Y_train, Y_val)
 
     epochs = 200
     convolution_model = False
@@ -116,8 +114,16 @@ def end_to_end_test():
     predictions_train = model.predict(X_train)  # to get percentages
 
     if VERBOSE:
-        display_model_results_analysis(X_val, Y_val, predictions_val, actual_probas_val,
-                                       [Y_train, predictions_train, actual_probas_train], nb_max_matchs_displayed=25)
+        print("\n --- TRAIN ANALYSIS --- ")
+        display_results_analysis(Y_train, predictions_train, bkm_quotes_train, nb_max_matchs_displayed=0)
+        print("\n --- VAL ANALYSIS --- ")
+        display_results_analysis(Y_val, predictions_val, bkm_quotes_val, nb_max_matchs_displayed=0)
+
+    # on the below, reduce universe to matches with quotes
+    remove_nan_mask_val = [not contain_nan(bkm_quotes_val.iloc[i]) for i in range(bkm_quotes_val.shape[0])]
+    bkm_quotes_val_r = bkm_quotes_val.iloc[remove_nan_mask_val]
+    Y_val_r = Y_val.iloc[remove_nan_mask_val]
+    predictions_val_r = predictions_val[remove_nan_mask_val]
 
     constant_invest_stgy = ConstantAmountInvestStrategy(1.)  # invest 1 in each match (if expected return > 1% actually)
     constant_sigma_invest_stgy = ConstantStdDevInvestStrategy(0.01)  # stdDev of each bet is 1% of wealth
@@ -127,7 +133,7 @@ def end_to_end_test():
     for invest_stgy in [constant_invest_stgy, constant_sigma_invest_stgy, kelly_invest_stgy, constant_percent_stgy]:
         print("\n#### results for ", invest_stgy.__class__.__name__, "####")
         init_wealth = 100
-        df_recap_stgy = invest_stgy.apply_invest_strategy(predictions_val, bkm_quotes_val, Y_val,
+        df_recap_stgy = invest_stgy.apply_invest_strategy(predictions_val_r, bkm_quotes_val_r, Y_val_r,
                                                           init_wealth=init_wealth)
 
         print(df_recap_stgy[['invested_amounts', 'exp_gain_amounts', 'gain_amounts']].sum())

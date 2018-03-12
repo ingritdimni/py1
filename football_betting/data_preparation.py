@@ -5,17 +5,77 @@ import numpy as np
 
 from utils import get_fifa_data, create_feables
 from collections import Counter
+from fables import simple_fable
+from my_utils import get_match_label, match_issues_indices, match_issues_hot_vectors, contain_nan
 
-DATA_PATH = "D:/Football_betting/all/soccer/"
+DATA_PATH = "D:/Football_betting/data/soccer/"
 DISPLAY_DATA = True
 FULL_LOAD = True
 REDUCE_DATA_SIZE = False
 REMOVE_NA = False
 
-COUNTRY_SELECTION = 'France'
+DEFAULT_COUNTRY_SELECTION = ["France", "Spain", "England", "Germany", "Italy"]
+# DEFAULT_COUNTRY_SELECTION = ["France", ]
 
 
-def main():
+def simple_data_prep(verbose=1, fable_observed_matches=40, padding=False, fable="match_hist",
+                     label_format="hot_vectors", remove_nan=True, countries=None):
+    data_start = time()
+    assert (label_format in ("hot_vectors", "indices", "labels"))
+    assert (fable in ("match_hist", "stats"))
+    if countries is None:
+        countries = DEFAULT_COUNTRY_SELECTION
+
+    if verbose: print(" ... loading data ...")
+    player_data, player_stats_data, team_data, match_data = first_data_preparation(DATA_PATH)
+    if verbose: print(" ... working with matches from", *countries, '...')
+    match_data = match_data.loc[match_data['league_country'].isin(countries)]
+    #team_id_to_name, team_name_to_id = create_dict_involved_teams(match_data, team_data)
+
+    if verbose >= 2:
+        for name, data in (
+                ('player_data', player_data), ('player_stats_data', player_stats_data), ('team_data', team_data),
+                ('match_data', match_data)):
+            print('\n---', name, data.shape, '---\n', data.head(5), '\n', data.columns.values)
+
+    if verbose: print(" ... creating fables ...")
+    match_features = simple_fable(match_data, nb_observed_match=fable_observed_matches, padding=padding,
+                                  horizontal_features=False, t_column_name='date', home_team_key='home_team_api_id',
+                                  away_team_key='away_team_api_id', home_goals_key='home_team_goal',
+                                  away_goals_key='away_team_goal')
+
+    if label_format == "hot_vectors":
+        match_labels = match_issues_hot_vectors(match_data)
+    elif label_format == "indices":
+        match_labels = match_issues_indices(match_data)
+    elif label_format == "labels":
+        match_labels = match_data.apply(get_match_label, axis=1)
+
+    if remove_nan:
+        shape_init = match_features.shape[0]
+        if verbose: print(" ... removing nan ...")
+        remove_nan_mask = [not contain_nan(match_features[i]) for i in range(shape_init)]
+        match_features = match_features[remove_nan_mask]
+        match_labels = match_labels.iloc[remove_nan_mask]
+        match_data = match_data.iloc[remove_nan_mask]
+        shape = match_features.shape[0]
+        if verbose: print('     ', shape_init - shape, 'matches removed;', shape, 'remaining')
+
+    bkm_quotes = pd.DataFrame()
+    bkm_quotes['W'], bkm_quotes['D'], bkm_quotes['L'] = match_data['B365H'], match_data['B365D'], match_data['B365A']
+
+    if verbose >= 2:
+        print('match_data shape    :', match_data.shape)
+        print('match features shape:', match_features.shape)
+        print('match labels shape  :', match_labels.shape)
+        print('bkm quotes shape    :', bkm_quotes.shape)
+    if verbose:
+        print(" ... data loaded and prepared in", round(time() - data_start, 2), 'seconds ...\n')
+
+    return match_data, match_features, match_labels, bkm_quotes
+
+
+def data_prep():
     start = time()
 
     # load global all, eliminating unwanted features
@@ -132,6 +192,17 @@ def main():
     # cv_sets = model_selection.StratifiedShuffleSplit(n_splits=5, test_size=0.20, random_state=5)
     # cv_sets.get_n_splits(X_train, y_train)
 
+
+def create_dict_involved_teams(match_data, team_data):
+    mask_home = team_data['team_api_id'].isin(match_data['home_team_api_id'])
+    mask_away = team_data['team_api_id'].isin(match_data['away_team_api_id'])
+    team_universe = team_data[mask_home | mask_away]
+
+    team_id_to_name, team_name_to_id = dict(), dict()
+    for index, row in team_universe.iterrows():
+        team_id_to_name[row["team_api_id"]] = row["team_long_name"]
+        team_name_to_id[row["team_long_name"]] = row["team_api_id"]
+    return team_id_to_name, team_name_to_id
 
 def matches_vectorization(match_data, team_data, additional_features=None, replace_id_by_names=True):
     mask_home = team_data['team_api_id'].isin(match_data['home_team_api_id'])
@@ -270,4 +341,5 @@ def drop_na_data(player_data, player_stats_data, team_data, match_data):
     return player_data, player_stats_data, team_data, match_data
 
 if __name__ == '__main__':
-    main()
+    # data_prep()
+    simple_data_prep()

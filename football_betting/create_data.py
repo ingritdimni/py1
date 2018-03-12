@@ -50,6 +50,7 @@ def full_data_creation(nb_teams, nb_seasons, dynamic_tag="dynamic", nb_seasons_v
                                     horizontal_features=horizontal_fable_features)
     elif fable == "stats":
         match_fables = simple_stats_fable(match_results, nb_observed_match=(nb_teams - 1) * fable_observed_seasons * 2)
+
     if label_format == "hot_vectors":
         match_labels = match_issues_hot_vectors(match_results)
     elif label_format == "indices":
