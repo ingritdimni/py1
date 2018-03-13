@@ -204,6 +204,7 @@ def create_dict_involved_teams(match_data, team_data):
         team_name_to_id[row["team_long_name"]] = row["team_api_id"]
     return team_id_to_name, team_name_to_id
 
+
 def matches_vectorization(match_data, team_data, additional_features=None, replace_id_by_names=True):
     mask_home = team_data['team_api_id'].isin(match_data['home_team_api_id'])
     mask_away = team_data['team_api_id'].isin(match_data['away_team_api_id'])
@@ -255,7 +256,7 @@ def matches_vectorization(match_data, team_data, additional_features=None, repla
     return vect_matches, team_universe, team_id_to_name, team_name_to_id
 
 
-def first_data_preparation(data_path):
+def first_data_preparation(data_path=DATA_PATH):
 
     # Fetching all
     # Connecting to database
