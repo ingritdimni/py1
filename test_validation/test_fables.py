@@ -71,8 +71,8 @@ def test_debug_fable():
 
     # print("\n### validate simple_fable ###")
     fables = simple_fable(match_results, nb_observed_match=2, padding=False)
-    print(match_results)
+    # print(match_results)
     # print(fables)
 
     fables2 = simple_stats_fable(match_results, nb_observed_match=2)
-    print(fables2)
+    # print(fables2)

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from create_data import create_stationary_poisson_match_results, create_dynamic_poisson_match_results, \
     create_noisy_bookmaker_quotes, full_data_creation
 from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, \
-    match_issues_hot_vectors, create_time_feature_from_season_and_stage
+    match_outcomes_hot_vectors, create_time_feature_from_season_and_stage
 from sklearn.metrics import accuracy_score, log_loss
 from fables import simple_fable, simple_stats_fable
 from nn_model import display_shapes, prepare_simple_nn_model, prepare_simple_nn_model_conv, \

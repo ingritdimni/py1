@@ -6,7 +6,7 @@ import numpy as np
 from utils import get_fifa_data, create_feables
 from collections import Counter
 from fables import simple_fable
-from my_utils import get_match_label, match_issues_indices, match_issues_hot_vectors, contain_nan
+from my_utils import get_match_label, match_outcomes_indices, match_outcomes_hot_vectors, contain_nan
 
 DATA_PATH = "D:/Football_betting/data/soccer/"
 DISPLAY_DATA = True
@@ -45,9 +45,9 @@ def simple_data_prep(verbose=1, fable_observed_matches=40, padding=False, fable=
                                   away_goals_key='away_team_goal')
 
     if label_format == "hot_vectors":
-        match_labels = match_issues_hot_vectors(match_data)
+        match_labels = match_outcomes_hot_vectors(match_data)
     elif label_format == "indices":
-        match_labels = match_issues_indices(match_data)
+        match_labels = match_outcomes_indices(match_data)
     elif label_format == "labels":
         match_labels = match_data.apply(get_match_label, axis=1)
 

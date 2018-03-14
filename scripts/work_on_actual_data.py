@@ -5,11 +5,11 @@ from keras.callbacks import ReduceLROnPlateau
 from keras.models import load_model
 import matplotlib.pyplot as plt
 from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, \
-    match_issues_hot_vectors, create_time_feature_from_season_and_stage, contain_nan
+    match_outcomes_hot_vectors, create_time_feature_from_season_and_stage, contain_nan, display_results_analysis
 from sklearn.metrics import accuracy_score, log_loss
 from fables import simple_fable, simple_stats_fable
 from nn_model import display_shapes, prepare_simple_nn_model, prepare_simple_nn_model_conv, \
-    display_model_results_analysis, display_results_analysis
+    display_model_results_analysis
 from invest_strategies import ConstantAmountInvestStrategy, KellyInvestStrategy, ConstantStdDevInvestStrategy, \
     ConstantPercentInvestStrategy
 from data_preparation import simple_data_prep

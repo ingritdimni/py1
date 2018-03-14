@@ -8,7 +8,7 @@ from keras.callbacks import ReduceLROnPlateau
 from keras import regularizers
 import matplotlib.pyplot as plt
 from create_data import create_stationary_poisson_match_results, create_dynamic_poisson_match_results
-from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, match_issues_hot_vectors, \
+from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, match_outcomes_hot_vectors, \
     create_time_feature_from_season_and_stage, display_shapes, bkm_quote_to_probas, contain_nan
 from fables import simple_fable
 from weights import exp_weight, exp_weights, linear_gated_weights, one_weights, season_count_fraction
@@ -201,7 +201,7 @@ def test_fable_on_data():
 
     match_results['date'] = create_time_feature_from_season_and_stage(match_results, base=100)
     match_fables = simple_fable(match_results, nb_observed_match=(nb_teams-1)*2)
-    match_labels = match_issues_hot_vectors(match_results)
+    match_labels = match_outcomes_hot_vectors(match_results)
 
     # Split the train and the validation set for the fitting
     # X_train, X_val, Y_train, Y_val = train_test_split(x_data, y_data, test_size=0.1, random_state=random_seed)
@@ -279,35 +279,6 @@ def w_categorical_crossentropy(target, output, weights):
     _epsilon = tf.convert_to_tensor(EPSILON, dtype=output.dtype.base_dtype)
     output = tf.clip_by_value(output, _epsilon, 1. - _epsilon)
     return - tf.reduce_sum(weights * target * tf.log(output), len(output.get_shape()) - 1)
-
-
-def display_results_analysis(y, pred, bkm_quotes, nb_max_matchs_displayed=10, compare_to_dummy_pred=True,
-                             fully_labelled_matches=None):
-    assert(y.shape[0] == pred.shape[0] == bkm_quotes.shape[0])
-    if fully_labelled_matches:
-        assert(y.shape[0] == fully_labelled_matches.shape[0])
-
-    bkm_probas = bkm_quote_to_probas(bkm_quotes)
-
-    #home_teams, away_teams = teams_from_dummies(X_val)
-    if nb_max_matchs_displayed: print("--- on the below, few prediction examples")
-    for i in range(min(y.shape[0], nb_max_matchs_displayed)):
-        match_result = y.iloc[i].idxmax(axis=1)
-        print()
-        # print(home_teams.iloc[i], away_teams.iloc[i], '-->', match_result)
-        print('model predictions :', pred[i])
-        print('bkm probas:', list(bkm_probas[i]))
-        print('bkm quote:', list(bkm_quotes.iloc[i]))
-    print()
-    print("total model log loss score:", round(log_loss(y, pred), 4))
-    remove_nan_mask = [not contain_nan(bkm_probas[i]) for i in range(bkm_probas.shape[0])]
-    print("bkm log loss score                           :", round(log_loss(y.iloc[remove_nan_mask],
-                                                                           bkm_probas[remove_nan_mask]), 4))
-    print("model log loss score on matches with bkm data:", round(log_loss(y.iloc[remove_nan_mask],
-                                                                           pred[remove_nan_mask]), 4))
-
-    if compare_to_dummy_pred:
-        print("score of equiprobability prediction :", round(log_loss(y, np.full(y.shape, 1./3)), 4))
 
 
 def display_model_results_analysis(X_val, Y_val, predictions_val, actual_probas_val, train_data_and_probas=None,

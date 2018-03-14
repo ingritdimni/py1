@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from sklearn.metrics import log_loss
 
 
 def contain_nan(el):
@@ -10,6 +11,14 @@ def contain_nan(el):
     except TypeError:
         return np.isnan(el)
     return False
+
+
+def get_values(array):
+    if isinstance(array, pd.DataFrame) or isinstance(array, pd.Series):
+        return array.values
+    if isinstance(array, np.ndarray):
+        return array
+    raise TypeError('array should be pd.DataFrame or pd.Series or np.ndarray')
 
 
 def bkm_quote_to_probas(bkm_quotes, outcomes_labels=None):
@@ -29,18 +38,31 @@ def trivial_feature_engineering(match_results, home_team_key='home_team_id', awa
     x_data = match_results.drop(labels=labels_to_drop, axis=1)
     x_dummy = pd.get_dummies(x_data, columns=[home_team_key, away_team_key])
 
-    y_dummy = match_issues_hot_vectors(match_results)
+    y_dummy = match_outcomes_hot_vectors(match_results)
     return x_dummy, y_dummy
 
 
-def match_issues_hot_vectors(match_results, home_goals_key='home_team_goal', away_goal_key='away_team_goal'):
+def rank_prob_score(predictions, y_hot_vectors):
+    """ personnal implementation of ranked probability score (see Constantinou et al.)"""
+    pred = get_values(predictions)
+    y = get_values(y_hot_vectors)
+    n, n_cat = pred.shape[0], pred.shape[1]
+    assert(n == y.shape[0] and n_cat == y.shape[1])
+    score = 0
+    for i in range(n):
+        for j in range(n_cat):
+            score += (np.sum(predictions[i, :j+1]) - np.sum(y[i, :j+1]))**2
+    return score/(n_cat - 1)
+
+
+def match_outcomes_hot_vectors(match_results, home_goals_key='home_team_goal', away_goal_key='away_team_goal'):
     y_data = match_results.apply(lambda x: get_match_label(x, home_goals_key, away_goal_key), axis=1)
     y_dummy = pd.get_dummies(y_data, prefix_sep='')
     y_dummy = y_dummy[['W', 'D', 'L']]  # change order to get win first
     return y_dummy
 
 
-def match_issues_indices(match_results, home_goals_key='home_team_goal', away_goal_key='away_team_goal'):
+def match_outcomes_indices(match_results, home_goals_key='home_team_goal', away_goal_key='away_team_goal'):
     y_indices = match_results.apply(lambda x: get_index_match_label(x, home_goals_key, away_goal_key), axis=1)
     return y_indices
 
@@ -50,6 +72,40 @@ def display_shapes(X_train, X_val, Y_train, Y_val):
     print("X_val shape:", X_val.shape)
     print("Y_train shape:", Y_train.shape)
     print("Y_val shape:", Y_val.shape)
+
+
+def display_results_analysis(y, pred, bkm_quotes, nb_max_matchs_displayed=10, compare_to_dummy_pred=True,
+                             fully_labelled_matches=None, rank_prob_score_comparison=True, home_team_key='home_team_id',
+                             away_team_key='away_team_id', home_goals_key = 'home_team_goal',
+                             away_goal_key='away_team_goal'):
+    assert(y.shape[0] == pred.shape[0] == bkm_quotes.shape[0])
+    if fully_labelled_matches is not None:
+        assert(y.shape[0] == fully_labelled_matches.shape[0])
+
+    bkm_probas = bkm_quote_to_probas(bkm_quotes)
+    if nb_max_matchs_displayed: print("--- on the below, few prediction examples")
+    for i in range(min(y.shape[0], nb_max_matchs_displayed)):
+        print()
+        if fully_labelled_matches is not None:
+            print(fully_labelled_matches[home_team_key].iloc[i], '  ', fully_labelled_matches[home_goals_key].iloc[i],
+                  fully_labelled_matches[away_goal_key].iloc[i], '  ', fully_labelled_matches[away_team_key].iloc[i])
+        print('model predictions :', pred[i])
+        print('bkm probas:', list(bkm_probas[i]))
+        print('bkm quote:', list(bkm_quotes.iloc[i]))
+    print()
+    print("total model log loss score:", round(log_loss(y, pred), 4))
+    remove_nan_mask = [not contain_nan(bkm_probas[i]) for i in range(bkm_probas.shape[0])]
+    print("bkm log loss score                           :", round(log_loss(y.iloc[remove_nan_mask],
+                                                                           bkm_probas[remove_nan_mask]), 4))
+    print("model log loss score on matches with bkm data:", round(log_loss(y.iloc[remove_nan_mask],
+                                                                           pred[remove_nan_mask]), 4))
+    if rank_prob_score_comparison:
+        bkm_rps = rank_prob_score(bkm_probas[remove_nan_mask], y.iloc[remove_nan_mask])
+        model_rps = rank_prob_score(pred[remove_nan_mask], y.iloc[remove_nan_mask])
+        print("bkm rps score (on matches with bkm data):", bkm_rps)
+        print("model rps score on matches with bkm data:", model_rps)
+    if compare_to_dummy_pred:
+        print("score of equiprobability prediction :", round(log_loss(y, np.full(y.shape, 1./3)), 4))
 
 
 def get_match_label(match, home_goals_key='home_team_goal', away_goal_key='away_team_goal'):

@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 from poisson import PoissonHelper
 from sklearn.metrics import accuracy_score, log_loss
 
-from my_utils import create_time_feature_from_season_and_stage, match_issues_hot_vectors, \
-    match_issues_indices, split_input, display_shapes, get_match_label
+from my_utils import create_time_feature_from_season_and_stage, match_outcomes_hot_vectors, \
+    match_outcomes_indices, split_input, display_shapes, get_match_label
 from fables import simple_fable, simple_stats_fable
 
 DATA_PATH = "D:/Football_betting/artificial_data/"  # default export path, might be overwritten
@@ -52,9 +52,9 @@ def full_data_creation(nb_teams, nb_seasons, dynamic_tag="dynamic", nb_seasons_v
         match_fables = simple_stats_fable(match_results, nb_observed_match=(nb_teams - 1) * fable_observed_seasons * 2)
 
     if label_format == "hot_vectors":
-        match_labels = match_issues_hot_vectors(match_results)
+        match_labels = match_outcomes_hot_vectors(match_results)
     elif label_format == "indices":
-        match_labels = match_issues_indices(match_results)
+        match_labels = match_outcomes_indices(match_results)
     elif label_format == "labels":
         match_labels = match_results.apply(get_match_label, axis=1)
 
