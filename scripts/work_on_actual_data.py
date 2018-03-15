@@ -5,9 +5,10 @@ from keras.callbacks import ReduceLROnPlateau
 from keras.models import load_model
 import matplotlib.pyplot as plt
 from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, \
-    match_outcomes_hot_vectors, create_time_feature_from_season_and_stage, contain_nan, display_results_analysis
+    match_outcomes_hot_vectors, create_time_feature_from_season_and_stage, analyze_predictions
 from sklearn.metrics import accuracy_score, log_loss
 from fables import simple_fable, simple_stats_fable
+
 from nn_model import display_shapes, prepare_simple_nn_model, prepare_simple_nn_model_conv, \
     display_model_results_analysis
 from invest_strategies import ConstantAmountInvestStrategy, KellyInvestStrategy, ConstantStdDevInvestStrategy, \
@@ -115,9 +116,9 @@ def end_to_end_test():
 
     if VERBOSE:
         print("\n --- TRAIN ANALYSIS --- ")
-        display_results_analysis(Y_train, predictions_train, bkm_quotes_train, nb_max_matchs_displayed=0)
+        analyze_predictions(Y_train, predictions_train, bkm_quotes_train, nb_max_matchs_displayed=0)
         print("\n --- VAL ANALYSIS --- ")
-        display_results_analysis(Y_val, predictions_val, bkm_quotes_val, nb_max_matchs_displayed=0)
+        analyze_predictions(Y_val, predictions_val, bkm_quotes_val, nb_max_matchs_displayed=0)
 
     # on the below, reduce universe to matches with quotes
     remove_nan_mask_val = [not contain_nan(bkm_quotes_val.iloc[i]) for i in range(bkm_quotes_val.shape[0])]

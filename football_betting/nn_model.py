@@ -9,7 +9,7 @@ from keras import regularizers
 import matplotlib.pyplot as plt
 from create_data import create_stationary_poisson_match_results, create_dynamic_poisson_match_results
 from my_utils import split_input, split_inputs, get_match_label, trivial_feature_engineering, match_outcomes_hot_vectors, \
-    create_time_feature_from_season_and_stage, display_shapes, bkm_quote_to_probas, contain_nan
+    create_time_feature_from_season_and_stage, display_shapes, bkm_quote_to_probas
 from fables import simple_fable
 from weights import exp_weight, exp_weights, linear_gated_weights, one_weights, season_count_fraction
 from keras.losses import categorical_crossentropy

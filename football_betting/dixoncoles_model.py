@@ -1,52 +1,88 @@
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
-from data_preparation import first_data_preparation, create_dict_involved_teams
-from poisson import PoissonHelper
-from dateutil.relativedelta import relativedelta
 from time import time
-import datetime
+
+from scipy.optimize import minimize
+from dateutil.relativedelta import relativedelta
+
+from poisson import PoissonHelper
+from my_utils import match_outcomes_hot_vectors, analyze_predictions
+from utils_generic import printv
 
 
-def test_dixon_coles():
-    # min_date = '2013-06-31'
-    # ma_date = '2013-07-14'
-    # input(ma_date-min_date)
-    # print(match_data['date'].iloc[0], match_data['date'].iloc[0].__class__)
-    # d1 = datetime.datetime.strptime(match_data['date'].iloc[0], "%Y-%m-%d %H:%M:%S").date()
-    # d2 = datetime.datetime.strptime(match_data['date'].iloc[100], "%Y-%m-%d %H:%M:%S").date()
-    # d3 = datetime.datetime.strptime(match_data['date'].iloc[1000], "%Y-%m-%d %H:%M:%S").date()
-    # print(d1, d2, d1.__class__, (d1-d2).days, int((d3-d1).days)/365.25)
-    # input()
+def dixon_coles_predictions(matches_to_predict, full_match_history, nb_obs_years=3, dixon_coles_params=None, verbose=1,
+                            intermediary_analysis=True, home_team_key='home_team_id', away_team_key='away_team_id',
+                            home_goals_key='home_team_goal', away_goals_key='away_team_goal', time_key='date',
+                            season_key='season', stage_key='stage', bkm_home_win_key='B365H', bkm_draw_key='B365D',
+                            bkm_away_win_key='B365A'):
 
-    player_data, player_stats_data, team_data, match_data = first_data_preparation()
-    countries = ['France', ]
-    min_date = '2013-06-31'
-    match_data = match_data.loc[match_data['league_country'].isin(countries)]
-    match_data = match_data[match_data['date'] >= min_date]
+    # default model params
+    if dixon_coles_params is None:
+        dixon_coles_params = dict()
 
-    mask_home = team_data['team_api_id'].isin(match_data['home_team_api_id'])
-    mask_away = team_data['team_api_id'].isin(match_data['away_team_api_id'])
-    team_universe = list(team_data[mask_home | mask_away]['team_long_name'])
-    print(len(team_universe), team_universe)
-    print('nb matches', match_data.shape[0])
+    # create an index to be able to return predictions in the order of the input (not the order it s been computed)
+    matches_to_predict['tmp_index'] = range(len(matches_to_predict))
+    countries = list(matches_to_predict['league_country'].unique())
+    all_predictions = None
+    for country in countries:
+        printv(1, verbose, "\n ####  WORKING WITH DATA FROM", country, " #### ")
+        match_data = matches_to_predict[matches_to_predict['league_country'].isin([country, ])]
+        match_history = full_match_history[full_match_history['league_country'].isin([country, ])]
 
-    # on the below: non effective way to use team names as id (easier for human-checking and debugging)
-    team_id_to_name, team_name_to_id = create_dict_involved_teams(match_data, team_data)
-    match_data['home_team_id'] = match_data.apply(lambda x: team_id_to_name[x['home_team_api_id']], axis=1)
-    match_data['away_team_id'] = match_data.apply(lambda x: team_id_to_name[x['away_team_api_id']], axis=1)
+        # on the below: define our team universe (teams we calibrate parameters on)
+        team_universe = set(match_history[home_team_key].unique()) | set(match_history[away_team_key].unique())
+        printv(1, verbose, ' ...', len(team_universe), ' teams involved:', *team_universe, '...')
+        printv(1, verbose, ' ...', match_data.shape[0], 'matches to predict ...')
 
-    model = DixonColes(team_universe)
-    print("... fit dixon coles parameters ...")
+        model = DixonColes(team_universe, **dixon_coles_params)
+        printv(1, verbose, " ... fit dixon coles parameters and predict match outcomes ... ")
+        predictions, param_histo = model.fit_and_predict(match_data, match_history, nb_obs_years=nb_obs_years,
+                                                         verbose=verbose, home_team_key=home_team_key,
+                                                         away_team_key=away_team_key, home_goals_key=home_goals_key,
+                                                         away_goals_key=away_goals_key, time_key=time_key,
+                                                         season_key=season_key, stage_key=stage_key)
+        printv(1, verbose, " ... match outcomes predicted ... ")
 
-    opti_params = model.optimize_parameters(match_data, home_goals_key='home_team_goal',
-                                            away_goals_key='away_team_goal')
-    model.display_params(opti_params)
+        if len(countries) > 1 and intermediary_analysis:  # display or not intermediary predictions quality
+            match_outcomes = match_outcomes_hot_vectors(match_data)
+            bkm_quotes = pd.DataFrame()
+            bkm_quotes['W'] = match_data[bkm_home_win_key]
+            bkm_quotes['D'] = match_data[bkm_draw_key]
+            bkm_quotes['L'] = match_data[bkm_away_win_key]
+            analysis = analyze_predictions(match_outcomes, predictions, bkm_quotes, nb_max_matchs_displayed=40,
+                                           fully_labelled_matches=match_data, verbose=verbose,
+                                           home_team_key=home_team_key, away_team_key=away_team_key,
+                                           home_goals_key=home_goals_key, away_goals_key=away_goals_key)
+
+            model_log_loss, model_rps, (log_loss_comparison_l, rps_comparison_l) = analysis
+
+        # add predictions to those already made
+        predictions_with_index = np.append(match_data['tmp_index'].values.reshape((-1, 1)), predictions, axis=1)
+        if all_predictions is not None:
+            all_predictions = np.append(all_predictions, predictions_with_index, axis=0)
+        else:
+            all_predictions = predictions_with_index
+
+    # exctract all predictions, resort them by their index, and remove the index
+    all_predictions = all_predictions[all_predictions[:, 0].argsort()][:, 1:]
+
+    # perform a global analysis
+    all_match_outcomes = match_outcomes_hot_vectors(matches_to_predict)
+    all_bkm_quotes = pd.DataFrame()
+    all_bkm_quotes['W'] = matches_to_predict[bkm_home_win_key]
+    all_bkm_quotes['D'] = matches_to_predict[bkm_draw_key]
+    all_bkm_quotes['L'] = matches_to_predict[bkm_away_win_key]
+    analysis = analyze_predictions(all_match_outcomes, all_predictions, all_bkm_quotes, nb_max_matchs_displayed=40,
+                                   fully_labelled_matches=matches_to_predict, verbose=verbose,
+                                   home_team_key=home_team_key, away_team_key=away_team_key,
+                                   home_goals_key=home_goals_key, away_goals_key=away_goals_key)
+    print("final_pred shape", all_predictions.shape)
+    return all_predictions
 
 
 class DixonColes(object):
 
-    def __init__(self, team_universe, weight_fct=None, padding_scored=0.8, padding_conceded=1.5,
+    def __init__(self, team_universe, weight_fct=None, padding_scored=0.8, padding_conceded=1.2 ,
                  padding_intervention_ratio=0.33):
         """ team universe is an iterable of all involved teams of a given studied universe. Might be IDs or names"""
         self.nb_teams = len(team_universe)
@@ -64,18 +100,18 @@ class DixonColes(object):
         self.padding_conceded = padding_conceded
         self.padding_intervention_ratio = padding_intervention_ratio
 
-    def fit_and_predict(self, matches_to_predict, full_matches_history, nb_obs_years=3, padding=True, verbose=2,
+    def fit_and_predict(self, matches_to_predict, full_matches_history, nb_obs_years=3, padding=True, verbose=1,
                         home_team_key='home_team_id', away_team_key='away_team_id', home_goals_key='home_goals',
                         away_goals_key='away_goals', time_key='date', season_key='season', stage_key='stage'):
 
+        start_time = time()
         sorted_matches = matches_to_predict.sort_values(by=[season_key, stage_key, time_key])
 
         # first parameters calibration
         pred_season = sorted_matches[season_key].iloc[0]
         pred_stage = sorted_matches[stage_key].iloc[0]
         pred_time = sorted_matches[time_key].iloc[0]
-        if verbose >= 2:
-            print("current calibration;   season", pred_season, "  day", pred_stage, "  time", pred_time)
+        printv(2, verbose, "current calibration;   season", pred_season, "  day", pred_stage, "  time", pred_time)
         min_hist_time = pred_time - relativedelta(years=nb_obs_years)
         relevant_match_history = full_matches_history[min_hist_time <= full_matches_history[time_key]]
         relevant_match_history = relevant_match_history[relevant_match_history[time_key] < pred_time]
@@ -84,7 +120,7 @@ class DixonColes(object):
                                                home_goals_key=home_goals_key, away_goals_key=away_goals_key,
                                                time_key=time_key)
         if verbose >= 3:
-            self.display_params(opti_params)
+            self.print_params(opti_params)
         params_history = [[pred_time, opti_params], ]
 
         # storage of outcomes probabilities
@@ -96,10 +132,8 @@ class DixonColes(object):
             cur_stage = match[stage_key]
             cur_time = match[time_key]
             if cur_season != pred_season or cur_stage != pred_stage:
-                if verbose >= 2:
-                    print("current calibration;   season", cur_season, "  day", cur_stage, "  time", cur_time)
+                printv(2, verbose, "current calibration;   season", cur_season, "  day", cur_stage, "  time", cur_time)
                 pred_season, pred_stage, pred_time = cur_season, cur_stage, cur_time
-                # below line assumes time column is a string, ugly !
                 min_hist_time = pred_time - relativedelta(years=nb_obs_years)
                 relevant_match_history = full_matches_history[min_hist_time <= full_matches_history[time_key]]
                 relevant_match_history = relevant_match_history[relevant_match_history[time_key] < pred_time]
@@ -111,7 +145,7 @@ class DixonColes(object):
                 if opti_params is not None:
                     params_history.append([pred_time, opti_params])
                 if verbose >= 3:
-                    self.display_params(opti_params)
+                    self.print_params(opti_params)
 
         # make prediction by finding adapted param and use it to predict outcome
         sorted_params_history = sorted(params_history, key=lambda x: x[0])
@@ -122,15 +156,18 @@ class DixonColes(object):
             t, params_t = sorted_params_history[0]
             for next_t, params_next_t in sorted_params_history:
                 if next_t > match_t:
-                    break  # params to use have been found ! --> t, params_t
+                    break  # params to use have been found ! --> params_t
                 params_t = params_next_t
 
             # predictions using params
             p_w, p_d, p_l = self.predict_match_outcome(match[home_team_key], match[away_team_key], params_t)
             df_predictions = df_predictions.append({'W': p_w, 'D': p_d, 'L': p_l}, ignore_index=True)
-            if verbose >= 3:
-                print("prediction;", match[home_team_key], match[away_team_key], " --> ", round(p_w, 4), round(p_d, 4),
-                      round(p_l, 4))
+            printv(3, verbose, "prediction;", match[home_team_key], match[away_team_key], " --> ", round(p_w, 4),
+                   round(p_d, 4), round(p_l, 4))
+
+        end_time = time()
+        printv(1, verbose, " ... fit_and_predict computations performed in", round(end_time - start_time, 2),
+               "seconds ...")
 
         return df_predictions.values, sorted_params_history
 
@@ -152,7 +189,7 @@ class DixonColes(object):
                             home_goals_key='home_goals', away_goals_key='away_goals',
                             time_key='date', control_dates=True):
 
-        if control_dates: # control we calibrate params on past data
+        if control_dates:  # control we calibrate params on past data
             assert(matches[time_key].max() < current_time)
 
         # init params
@@ -191,8 +228,7 @@ class DixonColes(object):
                        options={'xtol': 10e-3, 'disp': False},
                        constraints=({'type': 'eq', 'fun': constraint_fct, 'jac': constraint_fct_der},))
         if not res.success:
-            if verbose:
-                print(" fail to calibrate parameters with method Newton-CG. trying another method (TNC)")
+            printv(1, verbose, " fail to calibrate parameters with method Newton-CG. trying another method (TNC)")
             res = minimize(likelihood_m, init_params, jac=likelihood_jac_m, method='TNC', bounds=bounds,
                            options={'xtol': 10e-3, 'disp': False},
                            constraints=({'type': 'eq', 'fun': constraint_fct, 'jac': constraint_fct_der},))
@@ -201,7 +237,7 @@ class DixonColes(object):
                 return None
         return res.x
 
-    def display_params(self, params):
+    def print_params(self, params):
         print(" ----  DIXON COLES PARAMETERS  ---- ")
         for i in range(self.nb_teams):
             print(self.team_index_to_id[i], round(params[i], 4), round(params[i + self.nb_teams], 4))
@@ -307,5 +343,5 @@ class DixonColes(object):
         return jac
 
 if __name__ == "__main__":
-    test_dixon_coles()
+    pass
 

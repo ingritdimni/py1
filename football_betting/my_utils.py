@@ -1,24 +1,25 @@
 import numpy as np
 import pandas as pd
 from sklearn.metrics import log_loss
+from utils_generic import get_array, contain_nan, printv
 
 
-def contain_nan(el):
-    try:
-        for e in el:
-            if contain_nan(e):
-                return True
-    except TypeError:
-        return np.isnan(el)
-    return False
-
-
-def get_values(array):
-    if isinstance(array, pd.DataFrame) or isinstance(array, pd.Series):
-        return array.values
-    if isinstance(array, np.ndarray):
-        return array
-    raise TypeError('array should be pd.DataFrame or pd.Series or np.ndarray')
+# def contain_nan(el):
+#     try:
+#         for e in el:
+#             if contain_nan(e):
+#                 return True
+#     except TypeError:
+#         return np.isnan(el)
+#     return False
+#
+#
+# def get_array(array):
+#     if isinstance(array, pd.DataFrame) or isinstance(array, pd.Series):
+#         return array.values
+#     if isinstance(array, np.ndarray):
+#         return array
+#     raise TypeError('array should be pd.DataFrame or pd.Series or np.ndarray')
 
 
 def bkm_quote_to_probas(bkm_quotes, outcomes_labels=None):
@@ -44,8 +45,8 @@ def trivial_feature_engineering(match_results, home_team_key='home_team_id', awa
 
 def rank_prob_score(predictions, y_hot_vectors):
     """ personnal implementation of ranked probability score (see Constantinou et al.)"""
-    pred = get_values(predictions)
-    y = get_values(y_hot_vectors)
+    pred = get_array(predictions)
+    y = get_array(y_hot_vectors)
     n, n_cat = pred.shape[0], pred.shape[1]
     assert(n == y.shape[0] and n_cat == y.shape[1])
     score = 0
@@ -74,38 +75,46 @@ def display_shapes(X_train, X_val, Y_train, Y_val):
     print("Y_val shape:", Y_val.shape)
 
 
-def display_results_analysis(y, pred, bkm_quotes, nb_max_matchs_displayed=10, compare_to_dummy_pred=True,
-                             fully_labelled_matches=None, rank_prob_score_comparison=True, home_team_key='home_team_id',
-                             away_team_key='away_team_id', home_goals_key = 'home_team_goal',
-                             away_goal_key='away_team_goal'):
+def analyze_predictions(y, pred, bkm_quotes, nb_max_matchs_displayed=10, compare_to_dummy_pred=True,
+                        fully_labelled_matches=None, verbose=1, home_team_key='home_team_id',
+                        away_team_key='away_team_id', home_goals_key='home_team_goal',
+                        away_goals_key='away_team_goal'):
     assert(y.shape[0] == pred.shape[0] == bkm_quotes.shape[0])
     if fully_labelled_matches is not None:
         assert(y.shape[0] == fully_labelled_matches.shape[0])
 
     bkm_probas = bkm_quote_to_probas(bkm_quotes)
-    if nb_max_matchs_displayed: print("--- on the below, few prediction examples")
+    if nb_max_matchs_displayed: printv(2, verbose, "--- on the below, few prediction examples")
     for i in range(min(y.shape[0], nb_max_matchs_displayed)):
-        print()
         if fully_labelled_matches is not None:
-            print(fully_labelled_matches[home_team_key].iloc[i], '  ', fully_labelled_matches[home_goals_key].iloc[i],
-                  fully_labelled_matches[away_goal_key].iloc[i], '  ', fully_labelled_matches[away_team_key].iloc[i])
-        print('model predictions :', pred[i])
-        print('bkm probas:', list(bkm_probas[i]))
-        print('bkm quote:', list(bkm_quotes.iloc[i]))
-    print()
-    print("total model log loss score:", round(log_loss(y, pred), 4))
+            printv(2, verbose, fully_labelled_matches[home_team_key].iloc[i], '  ',
+                   fully_labelled_matches[home_goals_key].iloc[i], fully_labelled_matches[away_goals_key].iloc[i], '  ',
+                   fully_labelled_matches[away_team_key].iloc[i])
+        printv(2, verbose, '\nmodel predictions :', pred[i])
+        printv(2, verbose, 'bkm probas:', list(bkm_probas[i]))
+        printv(2, verbose, 'bkm quote:', list(bkm_quotes.iloc[i]))
+
+    # log loss analysis
+    model_log_loss = log_loss(y, pred)
     remove_nan_mask = [not contain_nan(bkm_probas[i]) for i in range(bkm_probas.shape[0])]
-    print("bkm log loss score                           :", round(log_loss(y.iloc[remove_nan_mask],
-                                                                           bkm_probas[remove_nan_mask]), 4))
-    print("model log loss score on matches with bkm data:", round(log_loss(y.iloc[remove_nan_mask],
-                                                                           pred[remove_nan_mask]), 4))
-    if rank_prob_score_comparison:
-        bkm_rps = rank_prob_score(bkm_probas[remove_nan_mask], y.iloc[remove_nan_mask])
-        model_rps = rank_prob_score(pred[remove_nan_mask], y.iloc[remove_nan_mask])
-        print("bkm rps score (on matches with bkm data):", bkm_rps)
-        print("model rps score on matches with bkm data:", model_rps)
+    bkm_log_loss = log_loss(y.iloc[remove_nan_mask], bkm_probas[remove_nan_mask])
+    model_log_loss_bkm_comparison = log_loss(y.iloc[remove_nan_mask], pred[remove_nan_mask])
+    printv(1, verbose, "\ntotal model log loss score                   :", round(model_log_loss, 4))
+    printv(1, verbose, "model log loss score on matches with bkm data:", round(model_log_loss_bkm_comparison, 4))
+    printv(1, verbose, "bkm log loss score (on matches with bkm data):", round(bkm_log_loss, 4))
+
+    # rank probability score analysis
+    model_rps = rank_prob_score(pred, y)
+    bkm_rps = rank_prob_score(bkm_probas[remove_nan_mask], y.iloc[remove_nan_mask])
+    model_rps_bkm_comparison = rank_prob_score(pred[remove_nan_mask], y.iloc[remove_nan_mask])
+    printv(1, verbose, "total model rps score                   :", round(model_rps, 4))
+    printv(1, verbose, "model rps score on matches with bkm data:", round(model_rps_bkm_comparison, 4))
+    printv(1, verbose, "bkm rps score (on matches with bkm data):", round(bkm_rps, 4))
     if compare_to_dummy_pred:
-        print("score of equiprobability prediction :", round(log_loss(y, np.full(y.shape, 1./3)), 4))
+        printv(2, verbose, "score of equiprobability prediction :", round(log_loss(y, np.full(y.shape, 1./3)), 4))
+
+    return model_log_loss, model_rps, [[model_log_loss_bkm_comparison, bkm_log_loss],
+                                       [model_rps_bkm_comparison, bkm_rps]]
 
 
 def get_match_label(match, home_goals_key='home_team_goal', away_goal_key='away_team_goal'):

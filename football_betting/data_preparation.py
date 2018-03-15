@@ -6,7 +6,8 @@ import numpy as np
 from utils import get_fifa_data, create_feables
 from collections import Counter
 from fables import simple_fable
-from my_utils import get_match_label, match_outcomes_indices, match_outcomes_hot_vectors, contain_nan
+from my_utils import get_match_label, match_outcomes_indices, match_outcomes_hot_vectors
+from utils_generic import contain_nan
 
 DATA_PATH = "D:/Football_betting/data/soccer/"
 DISPLAY_DATA = True
@@ -202,6 +203,8 @@ def create_dict_involved_teams(match_data, team_data):
     for index, row in team_universe.iterrows():
         team_id_to_name[row["team_api_id"]] = row["team_long_name"]
         team_name_to_id[row["team_long_name"]] = row["team_api_id"]
+
+    assert(len(team_id_to_name) == len(team_name_to_id))
     return team_id_to_name, team_name_to_id
 
 
