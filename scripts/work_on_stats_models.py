@@ -14,6 +14,7 @@ from utils_generic import printv
 def test_dixon_coles_multi_countries_prediction():
     player_data, player_stats_data, team_data, match_data = first_data_preparation()
     countries = ['France', 'England', 'Germany', 'Spain', 'Italy']
+    min_date_str = '2013-07-31'
 
     # filter by countries
     mask_countries = match_data['league_country'].isin(countries)
@@ -31,7 +32,7 @@ def test_dixon_coles_multi_countries_prediction():
     full_history = match_data
 
     # filter on recent matchs only (to make predictions on them)
-    min_date = datetime.strptime('2013-07-31', "%Y-%m-%d").date()
+    min_date = datetime.strptime(min_date_str, "%Y-%m-%d").date()
     mask_date = match_data['date'] >= min_date
     matches_to_predict = match_data[mask_date]
 
@@ -43,6 +44,9 @@ def test_dixon_coles_multi_countries_prediction():
     predictions = dixon_coles_predictions(matches_to_predict, full_history, dixon_coles_params=dixon_coles_params,
                                           verbose=1)
 
+    # save predictions
+    # predictions.to_csv("D:/Football_betting/predictions/" + "dixon_coles_predictions.csv", index=False)
+    np.savetxt("D:/Football_betting/predictions/" + "dixon_coles_predictions.csv", predictions, delimiter=',', fmt='%.6e')
 #
 # def dixon_coles_predictions(matches_to_predict, full_match_history, dixon_coles_params=None, verbose=1,
 #                             intermediary_analysis=True, home_team_key='home_team_id',
