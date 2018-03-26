@@ -56,6 +56,10 @@ def end_to_end_test_2():
     bkm_quotes_train, bkm_quotes_val = bkm_quotes[~matches_to_predict_mask], bkm_quotes[matches_to_predict_mask]
     display_shapes(X_train, X_val, Y_train, Y_val)
 
+    # bkm_quotes_val.to_csv("D:/Football_betting/predictions/" + "bookmaker_quotes.csv", index=False)
+    # Y_val.to_csv("D:/Football_betting/predictions/" + "actual_results.csv", index=False)
+    # input('export done')
+
     # # split data
     # split_ratio = 0.15
     # X_train, X_val, (indices_train, indices_val) = split_input(match_features, 1.-split_ratio, random=True,
@@ -139,8 +143,8 @@ def end_to_end_test_2():
     predictions_val = model.predict(X_val)  # to get percentages
     predictions_train = model.predict(X_train)  # to get percentages
 
-    np.savetxt("D:/Football_betting/predictions/" + "conv_nn_predictions.csv", predictions_val, delimiter=',',
-               fmt='%.6e')
+    # np.savetxt("D:/Football_betting/predictions/" + "conv_nn_predictions.csv", predictions_val, delimiter=',',
+    #            fmt='%.6e')
 
     if VERBOSE:
         print("\n --- TRAIN ANALYSIS --- ")

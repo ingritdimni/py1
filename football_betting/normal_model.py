@@ -3,90 +3,91 @@ import pandas as pd
 from time import time
 
 from scipy.optimize import minimize
+from scipy.stats import norm
 from dateutil.relativedelta import relativedelta
 
-from stathelper import PoissonHelper
+from stathelper import PoissonHelper, NormalHelper
 from my_utils import match_outcomes_hot_vectors, analyze_predictions
 from utils_generic import printv
 
 
-def dixon_coles_predictions(matches_to_predict, full_match_history, nb_obs_years=3, dixon_coles_params=None, verbose=1,
-                            intermediary_analysis=True, home_team_key='home_team_id', away_team_key='away_team_id',
-                            home_goals_key='home_team_goal', away_goals_key='away_team_goal', time_key='date',
-                            season_key='season', stage_key='stage', bkm_home_win_key='B365H', bkm_draw_key='B365D',
-                            bkm_away_win_key='B365A'):
+# def lognormal_predictions(matches_to_predict, full_match_history, nb_obs_years=3, dixon_coles_params=None, verbose=1,
+#                             intermediary_analysis=True, home_team_key='home_team_id', away_team_key='away_team_id',
+#                             home_goals_key='home_team_goal', away_goals_key='away_team_goal', time_key='date',
+#                             season_key='season', stage_key='stage', bkm_home_win_key='B365H', bkm_draw_key='B365D',
+#                             bkm_away_win_key='B365A'):
+#
+#     # default model params
+#     if dixon_coles_params is None:
+#         dixon_coles_params = dict()
+#
+#     # create an index to be able to return predictions in the order of the input (not the order it s been computed)
+#     matches_to_predict['tmp_index'] = range(len(matches_to_predict))
+#     countries = list(matches_to_predict['league_country'].unique())
+#     all_predictions = None
+#     for country in countries:
+#         printv(1, verbose, "\n ####  WORKING WITH DATA FROM", country, " #### ")
+#         match_data = matches_to_predict[matches_to_predict['league_country'].isin([country, ])]
+#         match_history = full_match_history[full_match_history['league_country'].isin([country, ])]
+#
+#         # on the below: define our team universe (teams we calibrate parameters on)
+#         team_universe = set(match_history[home_team_key].unique()) | set(match_history[away_team_key].unique())
+#         printv(1, verbose, ' ...', len(team_universe), ' teams involved:', *team_universe, '...')
+#         printv(1, verbose, ' ...', match_data.shape[0], 'matches to predict ...')
+#
+#         model = DixonColes(team_universe, **dixon_coles_params)
+#         printv(1, verbose, " ... fit dixon coles parameters and predict match outcomes ... ")
+#         predictions, param_histo = model.fit_and_predict(match_data, match_history, nb_obs_years=nb_obs_years,
+#                                                          verbose=verbose, home_team_key=home_team_key,
+#                                                          away_team_key=away_team_key, home_goals_key=home_goals_key,
+#                                                          away_goals_key=away_goals_key, time_key=time_key,
+#                                                          season_key=season_key, stage_key=stage_key)
+#         printv(1, verbose, " ... match outcomes predicted ... ")
+#
+#         if len(countries) > 1 and intermediary_analysis:  # display or not intermediary predictions quality
+#             match_outcomes = match_outcomes_hot_vectors(match_data)
+#             bkm_quotes = pd.DataFrame()
+#             bkm_quotes['W'] = match_data[bkm_home_win_key]
+#             bkm_quotes['D'] = match_data[bkm_draw_key]
+#             bkm_quotes['L'] = match_data[bkm_away_win_key]
+#             analysis = analyze_predictions(match_outcomes, predictions, bkm_quotes, nb_max_matchs_displayed=40,
+#                                            fully_labelled_matches=match_data, verbose=verbose,
+#                                            home_team_key=home_team_key, away_team_key=away_team_key,
+#                                            home_goals_key=home_goals_key, away_goals_key=away_goals_key)
+#
+#             model_log_loss, model_rps, (log_loss_comparison_l, rps_comparison_l) = analysis
+#
+#         # add predictions to those already made
+#         predictions_with_index = np.append(match_data['tmp_index'].values.reshape((-1, 1)), predictions, axis=1)
+#         if all_predictions is not None:
+#             all_predictions = np.append(all_predictions, predictions_with_index, axis=0)
+#         else:
+#             all_predictions = predictions_with_index
+#
+#     # exctract all predictions, resort them by their index, and remove the index
+#     all_predictions = all_predictions[all_predictions[:, 0].argsort()][:, 1:]
+#
+#     # perform a global analysis
+#     all_match_outcomes = match_outcomes_hot_vectors(matches_to_predict)
+#     all_bkm_quotes = pd.DataFrame()
+#     all_bkm_quotes['W'] = matches_to_predict[bkm_home_win_key]
+#     all_bkm_quotes['D'] = matches_to_predict[bkm_draw_key]
+#     all_bkm_quotes['L'] = matches_to_predict[bkm_away_win_key]
+#     analysis = analyze_predictions(all_match_outcomes, all_predictions, all_bkm_quotes, nb_max_matchs_displayed=40,
+#                                    fully_labelled_matches=matches_to_predict, verbose=verbose,
+#                                    home_team_key=home_team_key, away_team_key=away_team_key,
+#                                    home_goals_key=home_goals_key, away_goals_key=away_goals_key)
+#     print("final_pred shape", all_predictions.shape)
+#     return all_predictions
 
-    # default model params
-    if dixon_coles_params is None:
-        dixon_coles_params = dict()
 
-    # create an index to be able to return predictions in the order of the input (not the order it s been computed)
-    matches_to_predict['tmp_index'] = range(len(matches_to_predict))
-    countries = list(matches_to_predict['league_country'].unique())
-    all_predictions = None
-    for country in countries:
-        printv(1, verbose, "\n ####  WORKING WITH DATA FROM", country, " #### ")
-        match_data = matches_to_predict[matches_to_predict['league_country'].isin([country, ])]
-        match_history = full_match_history[full_match_history['league_country'].isin([country, ])]
-
-        # on the below: define our team universe (teams we calibrate parameters on)
-        team_universe = set(match_history[home_team_key].unique()) | set(match_history[away_team_key].unique())
-        printv(1, verbose, ' ...', len(team_universe), ' teams involved:', *team_universe, '...')
-        printv(1, verbose, ' ...', match_data.shape[0], 'matches to predict ...')
-
-        model = DixonColes(team_universe, **dixon_coles_params)
-        printv(1, verbose, " ... fit dixon coles parameters and predict match outcomes ... ")
-        predictions, param_histo = model.fit_and_predict(match_data, match_history, nb_obs_years=nb_obs_years,
-                                                         verbose=verbose, home_team_key=home_team_key,
-                                                         away_team_key=away_team_key, home_goals_key=home_goals_key,
-                                                         away_goals_key=away_goals_key, time_key=time_key,
-                                                         season_key=season_key, stage_key=stage_key)
-        printv(1, verbose, " ... match outcomes predicted ... ")
-
-        if len(countries) > 1 and intermediary_analysis:  # display or not intermediary predictions quality
-            match_outcomes = match_outcomes_hot_vectors(match_data)
-            bkm_quotes = pd.DataFrame()
-            bkm_quotes['W'] = match_data[bkm_home_win_key]
-            bkm_quotes['D'] = match_data[bkm_draw_key]
-            bkm_quotes['L'] = match_data[bkm_away_win_key]
-            analysis = analyze_predictions(match_outcomes, predictions, bkm_quotes, nb_max_matchs_displayed=40,
-                                           fully_labelled_matches=match_data, verbose=verbose,
-                                           home_team_key=home_team_key, away_team_key=away_team_key,
-                                           home_goals_key=home_goals_key, away_goals_key=away_goals_key)
-
-            model_log_loss, model_rps, (log_loss_comparison_l, rps_comparison_l) = analysis
-
-        # add predictions to those already made
-        predictions_with_index = np.append(match_data['tmp_index'].values.reshape((-1, 1)), predictions, axis=1)
-        if all_predictions is not None:
-            all_predictions = np.append(all_predictions, predictions_with_index, axis=0)
-        else:
-            all_predictions = predictions_with_index
-
-    # exctract all predictions, resort them by their index, and remove the index
-    all_predictions = all_predictions[all_predictions[:, 0].argsort()][:, 1:]
-
-    # perform a global analysis
-    all_match_outcomes = match_outcomes_hot_vectors(matches_to_predict)
-    all_bkm_quotes = pd.DataFrame()
-    all_bkm_quotes['W'] = matches_to_predict[bkm_home_win_key]
-    all_bkm_quotes['D'] = matches_to_predict[bkm_draw_key]
-    all_bkm_quotes['L'] = matches_to_predict[bkm_away_win_key]
-    analysis = analyze_predictions(all_match_outcomes, all_predictions, all_bkm_quotes, nb_max_matchs_displayed=40,
-                                   fully_labelled_matches=matches_to_predict, verbose=verbose,
-                                   home_team_key=home_team_key, away_team_key=away_team_key,
-                                   home_goals_key=home_goals_key, away_goals_key=away_goals_key)
-    print("final_pred shape", all_predictions.shape)
-    return all_predictions
-
-
-class DixonColes(object):
+class NormalModel(object):
 
     def __init__(self, team_universe, weight_fct=None, padding_scored=0.9, padding_conceded=1.1,
                  padding_intervention_ratio=0.33):
         """ team universe is an iterable of all involved teams of a given studied universe. Might be IDs or names"""
         self.nb_teams = len(team_universe)
-        self.nb_params = self.nb_teams * 2 + 1
+        self.nb_params = self.nb_teams * 2 + 1  # alpha_i sigma_i, gamma
         self.team_index_to_id = dict(zip(range(self.nb_teams), team_universe))
         self.team_id_to_index = dict(zip(team_universe, range(self.nb_teams)))
         assert(len(self.team_index_to_id) == len(self.team_id_to_index))
@@ -173,15 +174,16 @@ class DixonColes(object):
 
     def predict_match_outcome(self, home_team_id, away_team_id, params):
         alpha_home = params[self.team_id_to_index[home_team_id]]
-        beta_home = params[self.team_id_to_index[home_team_id] + self.nb_teams]
+        sigma_home = params[self.team_id_to_index[home_team_id] + self.nb_teams]
         alpha_away = params[self.team_id_to_index[away_team_id]]
-        beta_away = params[self.team_id_to_index[away_team_id] + self.nb_teams]
+        sigma_away = params[self.team_id_to_index[away_team_id] + self.nb_teams]
         gamma = params[-1]
 
-        lambda_ = alpha_home * beta_away * gamma
-        mu_ = alpha_away * beta_home
+        diff_param = alpha_home - alpha_away + gamma
+        sigma = np.sqrt(sigma_home * sigma_away)
 
-        p_w, p_d, p_l = PoissonHelper.match_outcomes_probabilities(lambda_, mu_)
+        p_w, p_d, p_l = NormalHelper.match_outcomes_probabilities(diff_param, sigma)
+
         return p_w, p_d, p_l
 
     def optimize_parameters(self, matches, current_time, init_params=None, padding=True, verbose=1,
@@ -196,22 +198,22 @@ class DixonColes(object):
         if init_params is None:
             init_params = np.ones((self.nb_params, 1))
 
-        bounds = ((0.2, 5),) * self.nb_params
+        bounds = tuple([(-5, 5) if i % 2 == 0 else (0.01, 5) for i in range(self.nb_params)])
 
-        # define local functions involved in optimization
-        def constraint_fct(params):  # avg of alphas and betas must be one
-            return (np.sum(params[0:self.nb_teams]) - self.nb_teams) ** 2 + \
-                   (np.sum(params[self.nb_teams:2*self.nb_teams]) - self.nb_teams)**2
+        # # define local functions involved in optimization
+        # def constraint_fct(params):  # avg of alphas and betas must be one
+        #     return (np.sum(params[0:self.nb_teams]) - self.nb_teams) ** 2 + \
+        #            (np.sum(params[self.nb_teams:2*self.nb_teams]) - self.nb_teams)**2
 
-        def constraint_fct_der(params):
-            jac = np.zeros_like(params)
-            alpha_cur = np.sum(params[0:self.nb_teams]) - self.nb_teams
-            beta_cur = np.sum(params[self.nb_teams:2*self.nb_teams]) - self.nb_teams
-            for i in range(self.nb_teams):
-                jac[i] = 2. * params[i] * alpha_cur
-            for i in range(self.nb_teams,  2*self.nb_teams):
-                jac[i] = 2. * params[i] * beta_cur
-            return jac
+        # def constraint_fct_der(params):
+        #     jac = np.zeros_like(params)
+        #     alpha_cur = np.sum(params[0:self.nb_teams]) - self.nb_teams
+        #     beta_cur = np.sum(params[self.nb_teams:2*self.nb_teams]) - self.nb_teams
+        #     for i in range(self.nb_teams):
+        #         jac[i] = 2. * params[i] * alpha_cur
+        #     for i in range(self.nb_teams,  2*self.nb_teams):
+        #         jac[i] = 2. * params[i] * beta_cur
+        #     return jac
 
         def likelihood_m(params):
             return - self._likelihood(matches, params, current_time, padding=padding, home_team_key=home_team_key,
@@ -225,13 +227,11 @@ class DixonColes(object):
 
         # other ok methods; TNC or L-BFGS-B
         res = minimize(likelihood_m, init_params, jac=likelihood_jac_m, method='Newton-CG', bounds=bounds,
-                       options={'xtol': 10e-3, 'disp': False},
-                       constraints=({'type': 'eq', 'fun': constraint_fct, 'jac': constraint_fct_der},))
+                       options={'xtol': 10e-3, 'disp': False},)
         if not res.success:
             printv(1, verbose, " fail to calibrate parameters with method Newton-CG. trying another method (TNC)")
             res = minimize(likelihood_m, init_params, jac=likelihood_jac_m, method='TNC', bounds=bounds,
-                           options={'xtol': 10e-3, 'disp': False},
-                           constraints=({'type': 'eq', 'fun': constraint_fct, 'jac': constraint_fct_der},))
+                           options={'xtol': 10e-3, 'disp': False},)
             if not res.success:
                 print('\033[91m' + "fail to calibrate parameters on date " + str(current_time) + '\033[0m')
                 return None
@@ -259,18 +259,23 @@ class DixonColes(object):
             away_team_index = self.team_id_to_index[matches[away_team_key].iloc[i]]
             home_goals = matches[home_goals_key].iloc[i]
             away_goals = matches[away_goals_key].iloc[i]
+            diff_goals = home_goals - away_goals
             time = matches[time_key].iloc[i]
 
             alpha_home = params[home_team_index]
             alpha_away = params[away_team_index]
-            beta_home = params[self.nb_teams + home_team_index]
-            beta_away = params[self.nb_teams + away_team_index]
+            sigma_home = params[self.nb_teams + home_team_index]
+            sigma_away = params[self.nb_teams + away_team_index]
 
-            lambda_ = alpha_home * beta_away * gamma
-            mu_ = alpha_away * beta_home
+            diff_param = alpha_home - alpha_away + gamma
+            sigma_param = np.sqrt(sigma_home * sigma_away)
             weight = self.weight_fct(time, current_time)
 
-            result += weight * (home_goals * np.log(lambda_) - lambda_ + away_goals * np.log(mu_) - mu_)
+            x_p = (diff_goals + 0.5 - diff_param) / sigma_param
+            x_m = x_p - 1 / sigma_param
+
+            # result += weight * (home_goals * np.log(lambda_) - lambda_ + away_goals * np.log(mu_) - mu_)
+            result += weight * (norm.cdf(x_p) - norm.cdf(x_m))
             total_weights += weight
 
             # padding info
@@ -303,23 +308,31 @@ class DixonColes(object):
             away_team_index = self.team_id_to_index[matches[away_team_key].iloc[i]]
             home_goals = matches[home_goals_key].iloc[i]
             away_goals = matches[away_goals_key].iloc[i]
+            diff_goals = home_goals - away_goals
             time = matches[time_key].iloc[i]
 
             alpha_home = params[home_team_index]
             alpha_away = params[away_team_index]
-            beta_home = params[self.nb_teams + home_team_index]
-            beta_away = params[self.nb_teams + away_team_index]
+            sigma_home = params[self.nb_teams + home_team_index]
+            sigma_away = params[self.nb_teams + away_team_index]
+            diff_param = alpha_home - alpha_away + gamma
+            sigma_param = np.sqrt(sigma_home * sigma_away)
 
             weight = self.weight_fct(time, current_time)
             total_weights += weight
 
-            jac[home_team_index] += weight * (home_goals / alpha_home - gamma * beta_away)  # home alpha update
-            jac[away_team_index] += weight * (away_goals / alpha_away - beta_home)  # away alpha update
+            x_p = (diff_goals + 0.5 - diff_param) / sigma_param
+            x_m = x_p - 1 / sigma_param
+            norm_p = norm.pdf(x_p)
+            norm_m = norm.pdf(x_m)
 
-            jac[home_team_index + self.nb_teams] += weight * (away_goals / beta_home - alpha_away)  # home beta
-            jac[away_team_index + self.nb_teams] += weight * (home_goals / beta_away - gamma * alpha_home)  # away beta
+            jac[home_team_index] += weight * (norm_m - norm_p) / sigma_param  # home alpha update
+            jac[away_team_index] += weight * (norm_p - norm_m) / sigma_param  # away alpha update
 
-            jac[self.nb_params-1] += weight * (home_goals / gamma - alpha_home * beta_away)  # gamma update
+            jac[home_team_index + self.nb_teams] += weight * (x_m * norm_m - x_p * norm_p) / (2 * sigma_home)  # home sigma
+            jac[away_team_index + self.nb_teams] += weight * (x_m * norm_m - x_p * norm_p) / (2 * sigma_away)   # away sigma
+
+            jac[self.nb_params-1] += weight * weight * (norm_m - norm_p) / sigma_param   # gamma update
 
             # padding info
             total_weight_per_team[home_team_index] += weight

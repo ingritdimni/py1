@@ -26,41 +26,61 @@ DATA_PATH = "D:/Football_betting/artificial_data/"
 VERBOSE = True
 DISPLAY_GRAPH = True
 EPSILON = 1e-7
+
+
+# def test_fable_on_data():
+#     nb_teams = 20
+#     nb_seasons = 20
 #
+#     convolution_model = False
 #
-# def test_stationary_model_on_data():
-#     nb_teams = 18
-#     nb_seasons = 10
+#     #dynamic_tag = "stationary"
+#     dynamic_tag = "dynamic"
+#     params_str = 't' + str(nb_teams) + '_s' + str(nb_seasons) + '_'
 #
 #     np.random.seed(0)
-#     match_results = pd.read_csv(DATA_PATH + "stationary_poisson_results.csv")
-#     actual_probas = pd.read_csv(DATA_PATH + "stationary_poisson_results_probabilities.csv")
-#     # match_results, actual_probas, team_params = create_stationary_poisson_match_results(nb_teams, nb_seasons)
+#     try:
+#         match_results = pd.read_csv(DATA_PATH + params_str + dynamic_tag + "_poisson_results.csv")
+#         actual_probas = pd.read_csv(DATA_PATH + params_str + dynamic_tag + "_poisson_results_probabilities.csv")
+#     except FileNotFoundError:
+#         if dynamic_tag == "dynamic":
+#             match_results, actual_probas, team_params = create_dynamic_poisson_match_results(nb_teams, nb_seasons,
+#                                                                                              nb_fixed_seasons=2,
+#                                                                                              export=True)
+#         elif dynamic_tag == "stationary":
+#             match_results, actual_probas, team_params = create_stationary_poisson_match_results(nb_teams, nb_seasons,
+#                                                                                                 export=True)
+#
+#     match_results['date'] = create_time_feature_from_season_and_stage(match_results, base=100)
+#     match_fables = simple_fable(match_results, nb_observed_match=(nb_teams-1)*2)
+#     match_labels = match_outcomes_hot_vectors(match_results)
 #
 #     # Split the train and the validation set for the fitting
 #     # X_train, X_val, Y_train, Y_val = train_test_split(x_data, y_data, test_size=0.1, random_state=random_seed)
-#     match_results90, match_results10, (indices90, indices10) = split_input(match_results, split_ratio=0.9,
-#                                                                            random=False, return_indices=True)
+#     X_train, X_val, (indices90, indices10) = split_input(match_fables, split_ratio=0.9,
+#                                                          random=False, return_indices=True)
 #
-#     X_train, Y_train = trivial_feature_engineering(match_results90)
-#     X_val, Y_val = trivial_feature_engineering(match_results10)
+#     # eliminate first season (no fable)
+#     _, X_train, (_, remaining_train_indices) = split_input(X_train, split_ratio=1./9., random=False,
+#                                                            return_indices=True)
 #
-#     # x_data, y_data = trivial_feature_engineering(match_results)
-#     # # Split the train and the validation set for the fitting
-#     # # X_train, X_val, Y_train, Y_val = train_test_split(x_data, y_data, test_size=0.1, random_state=random_seed)
-#     # X_train, X_val, Y_train, Y_val, (indices90, indices10) = split_inputs(x_data, y_data, split_ratio=0.9,
-#     #                                                                       random=False, return_indices=True)
+#     Y_train = match_labels.iloc[indices90].iloc[remaining_train_indices]
+#     Y_val = match_labels.iloc[indices10]
 #
 #     if VERBOSE: display_shapes(X_train, X_val, Y_train, Y_val)
 #
 #     # get actual probabilities of issues for the validation set of matches
-#     actual_probas_train = actual_probas.iloc[indices90]
+#     actual_probas_train = actual_probas.iloc[indices90].iloc[remaining_train_indices]
 #     actual_probas_val = actual_probas.iloc[indices10]
 #     print("best possible honnest score on train set:", log_loss(Y_train, actual_probas_train))
 #     print("best possible honnest score on validation set:", log_loss(Y_val, actual_probas_val))
 #
 #     # define and configure model
-#     model = prepare_simple_nn_model(X_train.shape[1])
+#     #model = prepare_simple_nn_model(X_train.shape[1])
+#     if convolution_model:
+#         model = prepare_simple_nn_model_conv(X_train.shape[1:])
+#     else:
+#         model = prepare_simple_nn_model(X_train.shape[1:])
 #
 #     # Its better to have a decreasing learning rate during the training to reach efficiently the global
 #     # minimum of the loss function.
@@ -77,7 +97,9 @@ EPSILON = 1e-7
 #     # model.compile(optimizer=optimizer, loss="categorical_crossentropy", metrics=["accuracy"])
 #     model.compile(optimizer=optimizer, loss="categorical_crossentropy")
 #
-#     epochs = 250
+#     if VERBOSE: model.summary()
+#
+#     epochs = 500
 #     batch_size = 256
 #     history = model.fit(x=X_train, y=Y_train, epochs=epochs, batch_size=batch_size, validation_data=(X_val, Y_val),
 #                         verbose=2, callbacks=[learning_rate_reduction])
@@ -99,177 +121,7 @@ EPSILON = 1e-7
 #
 #     if VERBOSE:
 #         display_model_results_analysis(X_val, Y_val, predictions_val, actual_probas_val,
-#                                        [Y_train, predictions_train, actual_probas_train])
-#
-#
-# def test_dynamic_model_on_data():
-#
-#     nb_teams = 18
-#     nb_seasons = 10
-#
-#     np.random.seed(0)
-#
-#     match_results = pd.read_csv(DATA_PATH + "dynamic_poisson_results.csv")
-#     actual_probas = pd.read_csv(DATA_PATH + "dynamic_poisson_results_probabilities.csv")
-#     # match_results, actual_probas, team_params = create_dynamic_poisson_match_results(nb_teams, nb_seasons,
-#     #                                                                                  nb_fixed_seasons=1)
-#
-#     # Split the train and the validation set for the fitting
-#     match_results90, match_results10, (indices90, indices10) = split_input(match_results, split_ratio=0.9,
-#                                                                            random=False, return_indices=True)
-#
-#     cur_season = 10
-#     cur_day = 1
-#     # weights_train = exp_weights(match_results90, cur_season, cur_day, (nb_teams-1) * 2, season_rate=0.30)
-#     weights_train = linear_gated_weights(match_results90, cur_season, cur_day, (nb_teams-1) * 2, nb_seasons_to_keep=7,
-#                                          normalize=True)
-#     weights_val = one_weights(match_results10.shape[0])
-#
-#     # prepare inputs / outputs for model
-#     X_train, Y_train = trivial_feature_engineering(match_results90)
-#     X_val, Y_val = trivial_feature_engineering(match_results10)
-#     if VERBOSE: display_shapes(X_train, X_val, Y_train, Y_val)
-#
-#     # get actual probabilities of issues for the validation set of matches
-#     actual_probas_train = actual_probas.iloc[indices90]
-#     actual_probas_val = actual_probas.iloc[indices10]
-#     print("best possible honnest score on train set:", log_loss(Y_train, actual_probas_train))
-#     print("best possible honnest score on validation set:", log_loss(Y_val, actual_probas_val))
-#
-#     # define and configure model
-#     model, weights_tensor = prepare_weights_and_nn_model(X_train.shape[1], weights_train.shape[1])
-#
-#     # custom loss
-#     w_custom_loss = partial(w_categorical_crossentropy, weights=weights_tensor)
-#
-#     # Its better to have a decreasing learning rate during the training to reach efficiently the global
-#     # minimum of the loss function.
-#     # To keep the advantage of the fast computation time with a high LR, i decreased the LR dynamically
-#     # every X steps (epochs) depending if it is necessary (when accuracy is not improved).
-#     # With the ReduceLROnPlateau function from Keras.callbacks, i choose to reduce the LR by half if the accuracy
-#     learning_rate_reduction = ReduceLROnPlateau(monitor='val_loss', patience=60, verbose=1, factor=0.6, min_lr=0.0001)
-#
-#     # Define the optimizer
-#     # optimizer = RMSprop(lr=0.001, rho=0.9, epsilon=1e-08, decay=0.0)
-#     optimizer = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0)
-#
-#     # Compile the model
-#     model.compile(optimizer=optimizer, loss=w_custom_loss)
-#
-#     epochs = 250
-#     batch_size = 256
-#
-#     history = model.fit(x=[X_train, weights_train], y=Y_train, epochs=epochs, batch_size=batch_size,
-#                         validation_data=([X_val, weights_val], Y_val), verbose=2, callbacks=[learning_rate_reduction])
-#
-#     # Plot the loss and accuracy curves for training and validation
-#     fig, ax = plt.subplots(1, 1)
-#     ax.plot(history.history['loss'][5:], color='b', label="Training loss")
-#     ax.plot(history.history['val_loss'][5:], color='r', label="validation loss", axes=ax)
-#     legend = ax.legend(loc='best', shadow=True)
-#
-#     if DISPLAY_GRAPH: plt.show()
-#
-#     # model predictions
-#     predictions_val = model.predict([X_val, weights_val])  # to get percentages
-#     if VERBOSE:
-#         display_model_results_analysis(X_val, Y_val, predictions_val, actual_probas_val)
-
-
-def test_fable_on_data():
-    nb_teams = 20
-    nb_seasons = 20
-
-    convolution_model = False
-
-    #dynamic_tag = "stationary"
-    dynamic_tag = "dynamic"
-    params_str = 't' + str(nb_teams) + '_s' + str(nb_seasons) + '_'
-
-    np.random.seed(0)
-    try:
-        match_results = pd.read_csv(DATA_PATH + params_str + dynamic_tag + "_poisson_results.csv")
-        actual_probas = pd.read_csv(DATA_PATH + params_str + dynamic_tag + "_poisson_results_probabilities.csv")
-    except FileNotFoundError:
-        if dynamic_tag == "dynamic":
-            match_results, actual_probas, team_params = create_dynamic_poisson_match_results(nb_teams, nb_seasons,
-                                                                                             nb_fixed_seasons=2,
-                                                                                             export=True)
-        elif dynamic_tag == "stationary":
-            match_results, actual_probas, team_params = create_stationary_poisson_match_results(nb_teams, nb_seasons,
-                                                                                                export=True)
-
-    match_results['date'] = create_time_feature_from_season_and_stage(match_results, base=100)
-    match_fables = simple_fable(match_results, nb_observed_match=(nb_teams-1)*2)
-    match_labels = match_outcomes_hot_vectors(match_results)
-
-    # Split the train and the validation set for the fitting
-    # X_train, X_val, Y_train, Y_val = train_test_split(x_data, y_data, test_size=0.1, random_state=random_seed)
-    X_train, X_val, (indices90, indices10) = split_input(match_fables, split_ratio=0.9,
-                                                         random=False, return_indices=True)
-
-    # eliminate first season (no fable)
-    _, X_train, (_, remaining_train_indices) = split_input(X_train, split_ratio=1./9., random=False,
-                                                           return_indices=True)
-
-    Y_train = match_labels.iloc[indices90].iloc[remaining_train_indices]
-    Y_val = match_labels.iloc[indices10]
-
-    if VERBOSE: display_shapes(X_train, X_val, Y_train, Y_val)
-
-    # get actual probabilities of issues for the validation set of matches
-    actual_probas_train = actual_probas.iloc[indices90].iloc[remaining_train_indices]
-    actual_probas_val = actual_probas.iloc[indices10]
-    print("best possible honnest score on train set:", log_loss(Y_train, actual_probas_train))
-    print("best possible honnest score on validation set:", log_loss(Y_val, actual_probas_val))
-
-    # define and configure model
-    #model = prepare_simple_nn_model(X_train.shape[1])
-    if convolution_model:
-        model = prepare_simple_nn_model_conv(X_train.shape[1:])
-    else:
-        model = prepare_simple_nn_model(X_train.shape[1:])
-
-    # Its better to have a decreasing learning rate during the training to reach efficiently the global
-    # minimum of the loss function.
-    # To keep the advantage of the fast computation time with a high LR, i decreased the LR dynamically
-    # every X steps (epochs) depending if it is necessary (when accuracy is not improved).
-    # With the ReduceLROnPlateau function from Keras.callbacks, i choose to reduce the LR by half if the accuracy
-    learning_rate_reduction = ReduceLROnPlateau(monitor='val_loss', patience=60, verbose=1, factor=0.6, min_lr=0.0001)
-
-    # Define the optimizer
-    # optimizer = RMSprop(lr=0.001, rho=0.9, epsilon=1e-08, decay=0.0)
-    optimizer = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0)
-
-    # Compile the model
-    # model.compile(optimizer=optimizer, loss="categorical_crossentropy", metrics=["accuracy"])
-    model.compile(optimizer=optimizer, loss="categorical_crossentropy")
-
-    if VERBOSE: model.summary()
-
-    epochs = 500
-    batch_size = 256
-    history = model.fit(x=X_train, y=Y_train, epochs=epochs, batch_size=batch_size, validation_data=(X_val, Y_val),
-                        verbose=2, callbacks=[learning_rate_reduction])
-
-    # Plot the loss and accuracy curves for training and validation
-    fig, ax = plt.subplots(2, 1)
-    ax[0].plot(history.history['loss'][5:], color='b', label="Training loss")
-    ax[0].plot(history.history['val_loss'][5:], color='r', label="validation loss", axes=ax[0])
-    legend = ax[0].legend(loc='best', shadow=True)
-
-    # ax[1].plot(history.history['acc'], color='b', label="Training accuracy")
-    # ax[1].plot(history.history['val_acc'], color='r', label="Validation accuracy")
-    # legend = ax[1].legend(loc='best', shadow=True)
-    if DISPLAY_GRAPH: plt.show()
-
-    # model predictions
-    predictions_val = model.predict(X_val)  # to get percentages
-    predictions_train = model.predict(X_train)  # to get percentages
-
-    if VERBOSE:
-        display_model_results_analysis(X_val, Y_val, predictions_val, actual_probas_val,
-                                       [Y_train, predictions_train, actual_probas_train], nb_max_matchs_displayed=25)
+#                                        [Y_train, predictions_train, actual_probas_train], nb_max_matchs_displayed=25)
 
 
 def w_categorical_crossentropy(target, output, weights):
@@ -439,6 +291,7 @@ def prepare_weights_and_nn_model(n_features, n_weights, n_activations=512, activ
     return model, weights_tensor
 
 if __name__ == "__main__":
+    pass
     # test_stationary_model_on_data()
     #test_dynamic_model_on_data()
-    test_fable_on_data()
+    # test_fable_on_data()

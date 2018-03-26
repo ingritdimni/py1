@@ -2,7 +2,7 @@ import numpy as np
 import copy
 import pandas as pd
 import matplotlib.pyplot as plt
-from poisson import PoissonHelper
+from stathelper import PoissonHelper
 from sklearn.metrics import accuracy_score, log_loss
 
 from my_utils import create_time_feature_from_season_and_stage, match_outcomes_hot_vectors, \

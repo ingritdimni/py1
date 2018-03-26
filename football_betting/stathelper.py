@@ -1,6 +1,7 @@
 import math
 import numpy as np
 from scipy.stats import poisson
+from scipy.stats import norm
 
 SOLVER_DEBUG_MODE = False
 
@@ -22,6 +23,73 @@ def solver(f, x_min, x_max, eps):
         return c
 
 
+class NormalHelper(object):
+
+    # default_min_diff = 0.05
+    # default_max_diff = 8.
+    # default_min_sigma = 0.1
+    # default_max_sigma = 5.
+    # default_precision = 0.01
+
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def diff_probability(diff_event, diff_param, sigma_param):
+        return norm.cdf((diff_event + 0.5 - diff_param) / sigma_param) - norm.cdf(
+            (diff_event + 0.5 - diff_param) / sigma_param)
+
+    @staticmethod
+    def match_outcomes_probabilities(diff_param, sigma_param):
+        p_home_d = norm.cdf((-0.5 - diff_param) / sigma_param)
+        p_home_v = 1. - norm.cdf((0.5 - diff_param) / sigma_param)
+        # p_draw = NormalHelper.diff_probability(0, diff_param, sigma_param)
+        p_draw = 1 - p_home_v - p_home_d
+
+        return p_home_v, p_draw, p_home_d
+
+    @staticmethod
+    def play_match(diff_param, sigma_param, seed=None):
+        """ creates a match result considering each team param represents its ability to score (poisson distrib)"""
+        if seed: np.random.seed(seed)
+        diff_goals = np.random.randn() * sigma_param + diff_param
+        return diff_goals
+
+    #
+    # @staticmethod
+    # def optimal_poisson_param_given_range(target_probabilities, lambda_1_min, lambda_1_max, precision,
+    #                                       absolute_min_lambda, absolute_max_lambda):
+    #
+    #     p1, p2, p3 = target_probabilities
+    #
+    #     def g(lambda_param_1):
+    #         f = lambda x: PoissonHelper.match_outcomes_probabilities(lambda_param_1, x)[0] - p1
+    #         lambda_param_2 = solver(f, absolute_min_lambda, absolute_max_lambda, precision)
+    #         return PoissonHelper.match_outcomes_probabilities(lambda_param_1, lambda_param_2)[1] - p2
+    #
+    #     # print " \lambda_1_min", lambda_1_min, "     lambda_1_max", lambda_1_max
+    #     lambda_param_1 = solver(g, lambda_1_min, lambda_1_max, precision)
+    #     lambda_param_2 = solver(lambda x: PoissonHelper.match_outcomes_probabilities(lambda_param_1, x)[0] - p1,
+    #                             absolute_min_lambda, absolute_max_lambda, precision)
+    #     return lambda_param_1, lambda_param_2
+    #
+    # # TODO raise specific exception
+    # @staticmethod
+    # def implied_param_from_proba(target_probabilities, nb_max_iterations=20, precision=0.000001,
+    #                              absolute_min_lambda=0.05, absolute_max_lambda=8.):
+    #     lambda_total_possible_range = absolute_max_lambda - absolute_min_lambda
+    #     lambda_sub_range = lambda_total_possible_range / nb_max_iterations
+    #     for i in range(nb_max_iterations):
+    #         try:
+    #             params = PoissonHelper.optimal_poisson_param_given_range(target_probabilities, absolute_min_lambda + i * lambda_sub_range,
+    #                                                                      absolute_min_lambda + (i + 1) * lambda_sub_range, precision,
+    #                                                                      absolute_min_lambda, absolute_max_lambda)
+    #             return params
+    #         except:
+    #             continue
+    #     raise Exception("no solution found !")
+
+
 class PoissonHelper(object):
 
     default_min_lambda = 0.05
@@ -32,11 +100,11 @@ class PoissonHelper(object):
         pass
 
     @staticmethod
-    def poisson_probability(k_events, lambda_param):
+    def scored_goals_probability(scored_goals, lambda_param):
         # naive:   math.exp(-mean) * mean**actual / factorial(actual)
         # iterative, to keep the components from getting too large or small:
         p = math.exp(-lambda_param)
-        for i in range(k_events):
+        for i in range(scored_goals):
             p *= lambda_param
             p /= i + 1
         return p
@@ -68,7 +136,7 @@ class PoissonHelper(object):
     # approximated (shifted part)
     @staticmethod
     def poisson_proba_table(lambda_param, k_max=10):
-        unshifted_prob = [PoissonHelper.poisson_probability(k, lambda_param) for k in range(k_max + 1)]
+        unshifted_prob = [PoissonHelper.scored_goals_probability(k, lambda_param) for k in range(k_max + 1)]
         total_prob = sum(unshifted_prob)
         shifted_prob = [prob / total_prob for prob in unshifted_prob]
         return shifted_prob
