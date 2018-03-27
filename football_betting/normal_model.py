@@ -83,8 +83,7 @@ from utils_generic import printv
 
 class NormalModel(object):
 
-    def __init__(self, team_universe, weight_fct=None, padding_scored=0.9, padding_conceded=1.1,
-                 padding_intervention_ratio=0.33):
+    def __init__(self, team_universe, weight_fct=None, padding_diff=-0.2, padding_intervention_ratio=0.33):
         """ team universe is an iterable of all involved teams of a given studied universe. Might be IDs or names"""
         self.nb_teams = len(team_universe)
         self.nb_params = self.nb_teams * 2 + 1  # alpha_i sigma_i, gamma
@@ -97,8 +96,7 @@ class NormalModel(object):
             self.weight_fct = weight_fct
 
         # if not enough data, we 'create' fake data with chosen properties to have more consistent results
-        self.padding_scored = padding_scored
-        self.padding_conceded = padding_conceded
+        self.padding_diff = padding_diff
         self.padding_intervention_ratio = padding_intervention_ratio
 
     def fit_and_predict(self, matches_to_predict, full_matches_history, nb_obs_years=3, padding=True, verbose=1,
@@ -196,24 +194,23 @@ class NormalModel(object):
 
         # init params
         if init_params is None:
-            init_params = np.ones((self.nb_params, 1))
+            init_params = np.array(
+                [0. if (i < self.nb_teams or i == self.nb_params - 1) else 1. for i in range(self.nb_params)])
+            # init_params = np.ones((self.nb_params, 0))
 
-        bounds = tuple([(-5, 5) if i % 2 == 0 else (0.01, 5) for i in range(self.nb_params)])
+        # bounds = tuple([(-5, 5) if i % 2 == 0 else (0.01, 5) for i in range(self.nb_params)])
+        bounds = tuple(
+            [(-3, 3) if (i < self.nb_teams or i == self.nb_params -1) else (0.01, 3) for i in range(self.nb_params)])
 
         # # define local functions involved in optimization
-        # def constraint_fct(params):  # avg of alphas and betas must be one
-        #     return (np.sum(params[0:self.nb_teams]) - self.nb_teams) ** 2 + \
-        #            (np.sum(params[self.nb_teams:2*self.nb_teams]) - self.nb_teams)**2
+        def constraint_fct(params):  # sum of alphas must be 0
+            return np.sum(params[0:self.nb_teams])
 
-        # def constraint_fct_der(params):
-        #     jac = np.zeros_like(params)
-        #     alpha_cur = np.sum(params[0:self.nb_teams]) - self.nb_teams
-        #     beta_cur = np.sum(params[self.nb_teams:2*self.nb_teams]) - self.nb_teams
-        #     for i in range(self.nb_teams):
-        #         jac[i] = 2. * params[i] * alpha_cur
-        #     for i in range(self.nb_teams,  2*self.nb_teams):
-        #         jac[i] = 2. * params[i] * beta_cur
-        #     return jac
+        def constraint_fct_der(params):
+            jac = np.zeros_like(params)
+            for i in range(self.nb_teams):
+                jac[i] = 1.
+            return jac
 
         def likelihood_m(params):
             return - self._likelihood(matches, params, current_time, padding=padding, home_team_key=home_team_key,
@@ -227,18 +224,20 @@ class NormalModel(object):
 
         # other ok methods; TNC or L-BFGS-B
         res = minimize(likelihood_m, init_params, jac=likelihood_jac_m, method='Newton-CG', bounds=bounds,
-                       options={'xtol': 10e-3, 'disp': False},)
+                       options={'xtol': 10e-3, 'disp': False},
+                       constraints=({'type': 'eq', 'fun': constraint_fct, 'jac': constraint_fct_der},))
         if not res.success:
             printv(1, verbose, " fail to calibrate parameters with method Newton-CG. trying another method (TNC)")
             res = minimize(likelihood_m, init_params, jac=likelihood_jac_m, method='TNC', bounds=bounds,
-                           options={'xtol': 10e-3, 'disp': False},)
+                           options={'xtol': 10e-3, 'disp': False},
+                           constraints=({'type': 'eq', 'fun': constraint_fct, 'jac': constraint_fct_der},))
             if not res.success:
                 print('\033[91m' + "fail to calibrate parameters on date " + str(current_time) + '\033[0m')
                 return None
         return res.x
 
     def print_params(self, params):
-        print(" ----  DIXON COLES PARAMETERS  ---- ")
+        print(" ----  NORMAL MODEL PARAMETERS  ---- ")
         for i in range(self.nb_teams):
             print(self.team_index_to_id[i], round(params[i], 4), round(params[i + self.nb_teams], 4))
         print('gamma:', round(params[-1], 4))
@@ -272,9 +271,8 @@ class NormalModel(object):
             weight = self.weight_fct(time, current_time)
 
             x_p = (diff_goals + 0.5 - diff_param) / sigma_param
-            x_m = x_p - 1 / sigma_param
+            x_m = x_p - 1. / sigma_param
 
-            # result += weight * (home_goals * np.log(lambda_) - lambda_ + away_goals * np.log(mu_) - mu_)
             result += weight * (norm.cdf(x_p) - norm.cdf(x_m))
             total_weights += weight
 
@@ -322,7 +320,7 @@ class NormalModel(object):
             total_weights += weight
 
             x_p = (diff_goals + 0.5 - diff_param) / sigma_param
-            x_m = x_p - 1 / sigma_param
+            x_m = x_p - 1. / sigma_param
             norm_p = norm.pdf(x_p)
             norm_m = norm.pdf(x_m)
 
@@ -343,15 +341,37 @@ class NormalModel(object):
         # we 'add' ('create') few results, all with the same chosen score, to 'penalize' team with missing data
         # (most often, team with missing data have been promoted, so they are less good than other teams with data)
         if padding:
+            avg_alpha = np.mean([params[t] for t in range(self.nb_teams)])
+            avg_sigma = np.mean([params[t + self.nb_teams] for t in range(self.nb_teams)])
             mean_t_weights = np.max(total_weight_per_team)
             for t in range(self.nb_teams):
                 t_weight = total_weight_per_team[t]
                 if t_weight < mean_t_weights * self.padding_intervention_ratio:
                     # print("-> correction of jac for", self.team_index_to_id[t])
                     missing_weight = mean_t_weights * self.padding_intervention_ratio - t_weight
-                    jac[t] += missing_weight * (self.padding_scored/params[t] - (gamma+1.)/2. * 1.)  # alpha update
-                    jac[t + self.nb_teams] += missing_weight * (
-                                    self.padding_conceded / params[t + self.nb_teams] - (gamma + 1.) / 2. * 1.)  # beta
+                    diff_home = self.padding_diff
+                    diff_away = - self.padding_diff
+
+                    x_p_h = (diff_home + 0.5 - (params[t] - avg_alpha + gamma)) / sigma_param
+                    x_m_h = x_p_h - 1. / sigma_param
+                    norm_x_p_h, norm_x_m_h = norm.pdf(x_p_h), norm.pdf(x_m_h)
+
+                    x_p_a = (diff_away + 0.5 - (avg_alpha - params[t] + gamma)) / sigma_param
+                    x_m_a = x_p_a - 1. / sigma_param
+                    norm_x_p_a, norm_x_m_a = norm.pdf(x_p_a), norm.pdf(x_m_a)
+
+                    sigma = np.sqrt(params[t + self.nb_teams] * avg_sigma)
+
+                    # idea: add artificial matches, where the diff is always the parametrized one
+
+                    # alpha update (home and away part)
+                    jac[t] += missing_weight * ((norm_x_m_h - norm_x_m_h) / 2. + (norm_x_p_a - norm_x_m_a) / 2.) / sigma
+
+                    # sigma update
+                    # sigma_jac_h = 0.5 * (x_m_h * norm_x_m_h - x_p_h * norm_x_p_h) / params[t + self.nb_teams]
+                    # sigma_jac_a = 0.5 * (x_m_a * norm_x_m_a - x_p_a * norm_x_p_a) / params[t + self.nb_teams]
+                    # jac[t + self.nb_teams] += missing_weight * (sigma_jac_h + sigma_jac_a)
+                    jac[t + self.nb_teams] += missing_weight * 2 * (params[t + self.nb_teams] - avg_sigma)
 
         return jac
 
